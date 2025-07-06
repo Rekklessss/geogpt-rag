@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y \
 
 # Set up Python
 RUN ln -s /usr/bin/python3 /usr/bin/python
-RUN python -m pip install --upgrade pip
+RUN python -m pip install --upgrade pip --break-system-packages
 
 # Set working directory
 WORKDIR /app
@@ -29,9 +29,9 @@ COPY reranking/requirements.txt /app/reranking/requirements.txt
 COPY rag_server/requirements.txt /app/rag_server/requirements.txt
 
 # Install Python dependencies
-RUN pip install -r embedding/requirements.txt
-RUN pip install -r reranking/requirements.txt
-RUN pip install -r rag_server/requirements.txt
+RUN pip install -r embedding/requirements.txt --break-system-packages
+RUN pip install -r reranking/requirements.txt --break-system-packages
+RUN pip install -r rag_server/requirements.txt --break-system-packages
 
 # Copy source code
 COPY . /app/
@@ -45,7 +45,7 @@ RUN mkdir -p /app/logs
 # Set permissions (scripts are made executable during runtime)
 
 # Download NLTK data
-RUN python -c "import nltk; nltk.download('punkt')"
+RUN python -c "import nltk; nltk.download('punkt')" || true
 
 # Expose ports
 EXPOSE 8810 8811 8812

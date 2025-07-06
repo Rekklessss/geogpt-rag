@@ -1,18 +1,16 @@
 #!/bin/bash
 
-# EC2 Setup Script for GeoGPT-RAG
-# This script sets up the complete environment on EC2 g5.xlarge instance and deploys the system
+# GeoGPT-RAG EC2 Setup Script
+# This script sets up the complete GeoGPT-RAG system on EC2
 
-set -e
+set -e  # Exit on any error
 
+echo "🚀 Starting GeoGPT-RAG EC2 Setup..."
+echo "==============================================="
+
+# Configuration
+PROJECT_DIR="/home/ubuntu/geogpt-rag"
 REPO_URL="https://github.com/Rekklessss/geogpt-rag.git"
-PROJECT_DIR="$HOME/geogpt-rag"
-
-echo "=== GeoGPT-RAG EC2 Setup & Deployment ==="
-echo "Repository: $REPO_URL"
-echo "Instance: g5.xlarge (3.233.224.145)"
-echo "Region: us-east-1"
-echo "=========================================="
 
 # Update system
 echo "📦 Updating system packages..."
@@ -25,58 +23,69 @@ sudo apt-get install -y \
     curl \
     wget \
     git \
-    htop \
-    vim \
     unzip \
-    software-properties-common \
-    apt-transport-https \
-    ca-certificates \
-    gnupg \
-    lsb-release
+    htop \
+    nvidia-utils-535 \
+    python3 \
+    python3-pip \
+    python3-venv \
+    ufw
 
 # Install Docker
 echo "🐳 Installing Docker..."
-sudo rm -f /usr/share/keyrings/docker-archive-keyring.gpg
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+# Remove existing Docker keyring and sources to avoid conflicts
+sudo rm -f /etc/apt/keyrings/docker.gpg
+sudo rm -f /etc/apt/sources.list.d/docker.list
 
-# Install Docker Compose
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+sudo apt-get update -y
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# Install Docker Compose standalone
 echo "🐳 Installing Docker Compose..."
-sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 sudo chmod +x /usr/local/bin/docker-compose
 
-# Add user to docker group
-echo "👤 Adding user to docker group..."
-sudo usermod -aG docker $USER
+# Add user to docker group and ensure Docker daemon is running
+sudo usermod -aG docker ubuntu
+sudo systemctl enable docker
+sudo systemctl start docker
 
-# Install NVIDIA Container Toolkit
-echo "🎮 Installing NVIDIA Container Toolkit..."
-sudo rm -f /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+# Install NVIDIA Docker runtime
+echo "🎮 Installing NVIDIA Docker runtime..."
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-    sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
 
-sudo apt-get update
+sudo apt-get update -y
 sudo apt-get install -y nvidia-container-toolkit
-
-# Configure Docker daemon for NVIDIA
-echo "🎮 Configuring Docker for NVIDIA..."
 sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
 
+# Test GPU access
+echo "🎮 Testing GPU access..."
+nvidia-smi
+
 # Install AWS CLI
 echo "☁️ Installing AWS CLI..."
+cd /tmp
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-unzip awscliv2.zip
+unzip -q awscliv2.zip
 sudo ./aws/install
-rm -rf awscliv2.zip aws/
 
-# Set up AWS credentials using IAM role
-echo "🔐 Setting up AWS credentials..."
+# Configure AWS CLI with IMDSv2
+echo "☁️ Configuring AWS credentials..."
+export AWS_DEFAULT_REGION=us-east-1
+export AWS_REGION=us-east-1
+
+# Create AWS config directory
 mkdir -p ~/.aws
+
+# Configure AWS credentials using IMDSv2
+TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/region)
+
 cat > ~/.aws/config << EOF
 [default]
 region = us-east-1
@@ -267,7 +276,7 @@ if [ $EMBEDDING_STATUS -eq 0 ] && [ $RERANKING_STATUS -eq 0 ] && [ $TEST_STATUS 
     echo "💡 The system is ready to use. Check ~/monitor_geogpt.sh for status monitoring."
 else
     echo "⚠️ Deployment completed with some issues. Check logs for details:"
-    echo "   docker-compose logs -f"
+    echo "   sudo docker-compose logs -f"
 fi
 
 echo ""
