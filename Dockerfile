@@ -53,52 +53,52 @@ COPY embedding/requirements.txt /app/embedding/requirements.txt
 COPY reranking/requirements.txt /app/reranking/requirements.txt
 COPY rag_server/requirements.txt /app/rag_server/requirements.txt
 
-# Install core packages first
+# Install core packages first (Python 3.12 compatible versions)
 RUN python3 -m pip install --break-system-packages --no-cache-dir \
-    numpy==1.24.3 \
-    scipy==1.11.4 \
+    numpy>=1.26.0 \
+    scipy>=1.11.0 \
     setuptools-scm \
     wheel \
     cython
 
-# Install PyTorch with CUDA support (compatible versions)
+# Install PyTorch with CUDA support (Python 3.12 compatible versions)
 RUN python3 -m pip install --break-system-packages --no-cache-dir \
-    torch==2.1.1 \
-    torchvision==0.16.1 \
-    torchaudio==2.1.1 \
+    torch>=2.2.0 \
+    torchvision>=0.17.0 \
+    torchaudio>=2.2.0 \
     --index-url https://download.pytorch.org/whl/cu118
 
 # Install grpcio with specific version that works
 RUN python3 -m pip install --break-system-packages --no-cache-dir grpcio==1.60.1
 
-# Install transformers and other ML packages
+# Install transformers and other ML packages (Python 3.12 compatible)
 RUN python3 -m pip install --break-system-packages --no-cache-dir \
-    transformers==4.37.2 \
-    tokenizers==0.15.0 \
-    sentence-transformers==2.2.2 \
-    huggingface-hub==0.20.3
+    transformers>=4.40.0 \
+    tokenizers>=0.15.0 \
+    sentence-transformers>=2.6.0 \
+    huggingface-hub>=0.20.0
 
-# Install FlagEmbedding with compatible version
-RUN python3 -m pip install --break-system-packages --no-cache-dir FlagEmbedding==1.2.11
+# Install FlagEmbedding with Python 3.12 compatible version
+RUN python3 -m pip install --break-system-packages --no-cache-dir FlagEmbedding>=1.3.0
 
-# Install embedding requirements (excluding conflicting packages)
+# Install web framework packages (Python 3.12 compatible)
 RUN python3 -m pip install --break-system-packages --no-cache-dir \
-    uvicorn==0.24.0 \
-    fastapi==0.104.1 \
-    pydantic==2.5.2
+    uvicorn>=0.27.0 \
+    fastapi>=0.110.0 \
+    pydantic>=2.6.0
 
 # Install reranking requirements (excluding FlagEmbedding since it's already installed)
 RUN python3 -m pip install --break-system-packages --no-cache-dir \
     sentencepiece==0.1.99
 
-# Install rag_server requirements
+# Install rag_server requirements (Python 3.12 compatible)
 RUN python3 -m pip install --break-system-packages --no-cache-dir \
-    langchain==0.1.0 \
-    langchain-community==0.0.10 \
-    requests==2.31.0 \
-    pymilvus==2.3.4 \
-    nltk==3.8.1 \
-    boto3==1.34.34
+    langchain>=0.1.16 \
+    langchain-community>=0.0.34 \
+    requests>=2.31.0 \
+    pymilvus>=2.4.0 \
+    nltk>=3.8.1 \
+    boto3>=1.34.0
 
 # Copy source code
 COPY . /app/
