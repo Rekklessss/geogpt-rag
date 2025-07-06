@@ -10,10 +10,15 @@ RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     python3-dev \
+    python3-venv \
     git \
     wget \
     curl \
     build-essential \
+    cmake \
+    pkg-config \
+    libssl-dev \
+    libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set up Python
@@ -28,10 +33,20 @@ COPY embedding/requirements.txt /app/embedding/requirements.txt
 COPY reranking/requirements.txt /app/reranking/requirements.txt
 COPY rag_server/requirements.txt /app/rag_server/requirements.txt
 
-# Install Python dependencies
-RUN pip install -r embedding/requirements.txt --break-system-packages
-RUN pip install -r reranking/requirements.txt --break-system-packages
-RUN pip install -r rag_server/requirements.txt --break-system-packages
+# Install Python dependencies with optimizations
+# First install common dependencies that might need compilation
+RUN pip install --break-system-packages --only-binary=all --no-cache-dir \
+    torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 || \
+    pip install --break-system-packages --no-cache-dir torch torchvision torchaudio
+
+# Install grpcio separately with pre-compiled wheel
+RUN pip install --break-system-packages --only-binary=grpcio --no-cache-dir grpcio || \
+    pip install --break-system-packages --no-cache-dir grpcio
+
+# Install remaining dependencies
+RUN pip install -r embedding/requirements.txt --break-system-packages --no-cache-dir
+RUN pip install -r reranking/requirements.txt --break-system-packages --no-cache-dir  
+RUN pip install -r rag_server/requirements.txt --break-system-packages --no-cache-dir
 
 # Copy source code
 COPY . /app/
