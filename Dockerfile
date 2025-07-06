@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y \
 
 # Set up Python
 RUN ln -s /usr/bin/python3 /usr/bin/python
-RUN python -m pip install --upgrade pip --break-system-packages
+# Skip pip upgrade - Ubuntu 24.04 pip 24.0 is sufficient
 
 # Set working directory
 WORKDIR /app
