@@ -43,7 +43,7 @@ RUN apt-get update && apt-get install -y \
 
 # Set up Python
 RUN ln -sf /usr/bin/python3 /usr/bin/python
-RUN python3 -m pip install --upgrade pip setuptools wheel
+RUN python3 -m pip install --break-system-packages --upgrade pip setuptools wheel
 
 # Set working directory
 WORKDIR /app
@@ -54,7 +54,7 @@ COPY reranking/requirements.txt /app/reranking/requirements.txt
 COPY rag_server/requirements.txt /app/rag_server/requirements.txt
 
 # Install core packages first
-RUN python3 -m pip install --no-cache-dir \
+RUN python3 -m pip install --break-system-packages --no-cache-dir \
     numpy==1.24.3 \
     scipy==1.11.4 \
     setuptools-scm \
@@ -62,37 +62,37 @@ RUN python3 -m pip install --no-cache-dir \
     cython
 
 # Install PyTorch with CUDA support (compatible versions)
-RUN python3 -m pip install --no-cache-dir \
+RUN python3 -m pip install --break-system-packages --no-cache-dir \
     torch==2.1.1 \
     torchvision==0.16.1 \
     torchaudio==2.1.1 \
     --index-url https://download.pytorch.org/whl/cu118
 
 # Install grpcio with specific version that works
-RUN python3 -m pip install --no-cache-dir grpcio==1.60.1
+RUN python3 -m pip install --break-system-packages --no-cache-dir grpcio==1.60.1
 
 # Install transformers and other ML packages
-RUN python3 -m pip install --no-cache-dir \
+RUN python3 -m pip install --break-system-packages --no-cache-dir \
     transformers==4.37.2 \
     tokenizers==0.15.0 \
     sentence-transformers==2.2.2 \
     huggingface-hub==0.20.3
 
 # Install FlagEmbedding with compatible version
-RUN python3 -m pip install --no-cache-dir FlagEmbedding==1.2.11
+RUN python3 -m pip install --break-system-packages --no-cache-dir FlagEmbedding==1.2.11
 
 # Install embedding requirements (excluding conflicting packages)
-RUN python3 -m pip install --no-cache-dir \
+RUN python3 -m pip install --break-system-packages --no-cache-dir \
     uvicorn==0.24.0 \
     fastapi==0.104.1 \
     pydantic==2.5.2
 
 # Install reranking requirements (excluding FlagEmbedding since it's already installed)
-RUN python3 -m pip install --no-cache-dir \
+RUN python3 -m pip install --break-system-packages --no-cache-dir \
     sentencepiece==0.1.99
 
 # Install rag_server requirements
-RUN python3 -m pip install --no-cache-dir \
+RUN python3 -m pip install --break-system-packages --no-cache-dir \
     langchain==0.1.0 \
     langchain-community==0.0.10 \
     requests==2.31.0 \
