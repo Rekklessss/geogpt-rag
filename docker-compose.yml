@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  geogpt-rag:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: geogpt-rag:latest
+    container_name: geogpt-rag-system
+    restart: unless-stopped
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONPATH=/app
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_REGION=us-east-1
+    ports:
+      - "8810:8810"  # Embedding service
+      - "8811:8811"  # Reranking service
+      - "8812:8812"  # RAG server (if needed)
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./split_chunks:/app/split_chunks
+      - ~/.aws:/root/.aws:ro  # AWS credentials
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      - nginx
+    networks:
+      - geogpt-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: geogpt-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - geogpt-rag
+    networks:
+      - geogpt-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: geogpt-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - geogpt-network
+
+networks:
+  geogpt-network:
+    driver: bridge
+
+volumes:
+  redis_data:
+    driver: local 

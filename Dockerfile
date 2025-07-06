@@ -1,0 +1,60 @@
+FROM nvidia/cuda:12.8.0-cudnn-devel-ubuntu24.04
+
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV DEBIAN_FRONTEND=noninteractive
+ENV CUDA_VISIBLE_DEVICES=0
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-dev \
+    git \
+    wget \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up Python
+RUN ln -s /usr/bin/python3 /usr/bin/python
+RUN python -m pip install --upgrade pip
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements files
+COPY embedding/requirements.txt /app/embedding/requirements.txt
+COPY reranking/requirements.txt /app/reranking/requirements.txt
+COPY rag_server/requirements.txt /app/rag_server/requirements.txt
+
+# Install Python dependencies
+RUN pip install -r embedding/requirements.txt
+RUN pip install -r reranking/requirements.txt
+RUN pip install -r rag_server/requirements.txt
+
+# Copy source code
+COPY . /app/
+
+# Create directories for models and data
+RUN mkdir -p /app/models/geo-embedding
+RUN mkdir -p /app/models/geo-reranker
+RUN mkdir -p /app/data/split_chunks
+RUN mkdir -p /app/logs
+
+# Set permissions
+RUN chmod +x /app/scripts/download_models.sh
+RUN chmod +x /app/scripts/start_services.sh
+
+# Download NLTK data
+RUN python -c "import nltk; nltk.download('punkt')"
+
+# Expose ports
+EXPOSE 8810 8811 8812
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8810/health || exit 1
+
+# Default command
+CMD ["/app/scripts/start_services.sh"] 
