@@ -20,45 +20,67 @@ The GeoGPT-RAG system consists of three main components:
 - AWS Sagemaker endpoint configured
 - Zilliz Cloud database configured
 
-## Quick Start
+## Quick Start - Simplified Two-Script Deployment
 
-### 1. Connect to EC2 Instance
+### 1. Initial Setup (Run Once)
 
 ```bash
+# Connect to EC2 instance
 ssh -i geogpt-ec2.pem ubuntu@3.233.224.145
+
+# Clone repository and run complete setup
+curl -fsSL https://raw.githubusercontent.com/Rekklessss/geogpt-rag/main/scripts/setup_ec2.sh | bash
+
+# Or manually:
+git clone https://github.com/Rekklessss/geogpt-rag.git ~/geogpt-rag
+cd ~/geogpt-rag
+chmod +x scripts/setup_ec2.sh
+./scripts/setup_ec2.sh
 ```
 
-### 2. Run the deployment script
+### 2. Redeploy After Changes
 
 ```bash
-# Upload this codebase to the instance
-# Then run the deployment script
-chmod +x scripts/deploy_ec2.sh
-./scripts/deploy_ec2.sh
+# Navigate to project directory
+cd ~/geogpt-rag
+
+# Complete cleanup and redeploy from scratch
+./scripts/cleanup_redeploy.sh
 ```
 
-### 3. Start the system
+### 3. Monitor and Verify
 
 ```bash
-# Make sure you're in the project directory
-cd ~/geogpt-rag/GeoGPT-RAG-master
+# Check service health
+curl http://localhost:8810/health  # Embedding service
+curl http://localhost:8811/health  # Reranking service
 
-# Start all services
-docker-compose up -d
+# Monitor system status
+~/monitor_geogpt.sh
 
-# Monitor the startup process
+# View logs
 docker-compose logs -f
 ```
 
-### 4. Verify the deployment
+## Simplified Two-Script Approach
 
-```bash
-# Check service status
-./scripts/monitor.sh
+This deployment uses only two scripts:
 
-# Run system tests
-docker exec -it geogpt-rag-system python /app/scripts/test_system.py
-```
+1. **`scripts/setup_ec2.sh`** - Complete EC2 environment setup and initial deployment
+   - Installs all dependencies (Docker, NVIDIA toolkit, AWS CLI, etc.)
+   - Clones repository from GitHub
+   - Downloads models and builds containers
+   - Starts all services
+   - Runs system tests
+   - Sets up monitoring
+
+2. **`scripts/cleanup_redeploy.sh`** - Complete cleanup and redeploy
+   - Stops all services
+   - Removes all containers, images, and volumes
+   - Deletes downloaded models and logs
+   - Pulls latest code from GitHub
+   - Rebuilds everything from scratch
+   - Redeploys all services
 
 ## System Architecture
 
@@ -161,7 +183,7 @@ curl http://localhost:8810/health  # Embedding service
 curl http://localhost:8811/health  # Reranking service
 
 # Check system status
-~/geogpt-rag/monitor.sh
+~/monitor_geogpt.sh
 ```
 
 ### Log Monitoring
@@ -193,8 +215,11 @@ htop
 
 1. **Models not downloading**
    ```bash
-   # Manually download models
-   docker exec -it geogpt-rag-system /app/scripts/download_models.sh
+   # Check if models exist
+   ls -la ~/geogpt-rag/models/
+   
+   # Force model download by removing and redeploying
+   cd ~/geogpt-rag && ./scripts/cleanup_redeploy.sh
    ```
 
 2. **GPU not detected**

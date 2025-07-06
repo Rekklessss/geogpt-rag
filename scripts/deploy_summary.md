@@ -1,42 +1,42 @@
-# GeoGPT-RAG Deployment Summary
+# GeoGPT-RAG Simplified Deployment Summary
 
-## Quick Deployment Commands
+## Two-Script Deployment Process
 
-### 1. Connect to EC2 Instance
+### 1. Initial Setup (Run Once)
 ```bash
-ssh -i your-key.pem ubuntu@3.233.224.145
+# Connect to EC2 instance
+ssh -i geogpt-ec2.pem ubuntu@3.233.224.145
+
+# Clone repository and run setup
+curl -fsSL https://raw.githubusercontent.com/Rekklessss/geogpt-rag/main/scripts/setup_ec2.sh | bash
+
+# Or manually:
+git clone https://github.com/Rekklessss/geogpt-rag.git ~/geogpt-rag
+cd ~/geogpt-rag
+chmod +x scripts/setup_ec2.sh
+./scripts/setup_ec2.sh
 ```
 
-### 2. Setup Environment
-```bash
-# Run the deployment script
-chmod +x scripts/deploy_ec2.sh
-./scripts/deploy_ec2.sh
-```
-
-### 3. Deploy System
+### 2. Redeploy After Changes (Run Anytime)
 ```bash
 # Navigate to project directory
-cd ~/geogpt-rag/GeoGPT-RAG-master
+cd ~/geogpt-rag
 
-# Start all services
-docker-compose up -d
-
-# Monitor startup
-docker-compose logs -f
+# Complete cleanup and redeploy
+./scripts/cleanup_redeploy.sh
 ```
 
-### 4. Verify Deployment
+### 3. Monitor System
 ```bash
 # Check service health
 curl http://localhost:8810/health  # Embedding service
 curl http://localhost:8811/health  # Reranking service
 
-# Run system tests
-docker exec -it geogpt-rag-system python /app/scripts/test_system.py
-
 # Monitor system status
-~/geogpt-rag/monitor.sh
+~/monitor_geogpt.sh
+
+# View logs
+docker-compose logs -f
 ```
 
 ## Configuration Summary

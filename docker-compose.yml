@@ -23,6 +23,39 @@ services:
       - ./logs:/app/logs
       - ./split_chunks:/app/split_chunks
       - ~/.aws:/root/.aws:ro  # AWS credentials
+    command: >
+      bash -c "
+        # Create necessary directories
+        mkdir -p /app/models/geo-embedding /app/models/geo-reranker /app/logs
+        
+        # Download models if they don't exist
+        if [ ! -f /app/models/geo-embedding/config.json ]; then
+          echo 'Downloading GeoEmbedding model...'
+          cd /app/models/geo-embedding
+          git clone https://huggingface.co/GeoGPT-Research-Project/GeoEmbedding . || echo 'Model download failed'
+        fi
+        
+        if [ ! -f /app/models/geo-reranker/config.json ]; then
+          echo 'Downloading GeoReranker model...'
+          cd /app/models/geo-reranker
+          git clone https://huggingface.co/GeoGPT-Research-Project/GeoReranker . || echo 'Model download failed'
+        fi
+        
+        # Start embedding service in background
+        cd /app/embedding
+        python embedding_api.py --model_path /app/models/geo-embedding --port 8810 --fp16 > /app/logs/embedding.log 2>&1 &
+        
+        # Start reranking service in background
+        cd /app/reranking
+        python reranker_fast_api.py --model_path /app/models/geo-reranker --port 8811 > /app/logs/reranking.log 2>&1 &
+        
+        # Wait for services to start
+        echo 'Waiting for services to initialize...'
+        sleep 30
+        
+        # Keep container running
+        wait
+      "
     deploy:
       resources:
         reservations:
@@ -30,41 +63,13 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    depends_on:
-      - nginx
     networks:
       - geogpt-network
 
-  nginx:
-    image: nginx:alpine
-    container_name: geogpt-nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-      - ./ssl:/etc/nginx/ssl
-    depends_on:
-      - geogpt-rag
-    networks:
-      - geogpt-network
 
-  redis:
-    image: redis:7-alpine
-    container_name: geogpt-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - geogpt-network
 
 networks:
   geogpt-network:
     driver: bridge
 
-volumes:
-  redis_data:
-    driver: local 
+ 

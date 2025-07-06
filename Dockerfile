@@ -42,9 +42,7 @@ RUN mkdir -p /app/models/geo-reranker
 RUN mkdir -p /app/data/split_chunks
 RUN mkdir -p /app/logs
 
-# Set permissions
-RUN chmod +x /app/scripts/download_models.sh
-RUN chmod +x /app/scripts/start_services.sh
+# Set permissions (scripts are made executable during runtime)
 
 # Download NLTK data
 RUN python -c "import nltk; nltk.download('punkt')"
@@ -56,5 +54,5 @@ EXPOSE 8810 8811 8812
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8810/health || exit 1
 
-# Default command
-CMD ["/app/scripts/start_services.sh"] 
+# Default command - models and services are started by docker-compose
+CMD ["tail", "-f", "/dev/null"] 
