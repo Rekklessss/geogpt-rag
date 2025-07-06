@@ -56,12 +56,21 @@ RUN echo "Installing other binary packages..." && \
     pip install --break-system-packages --only-binary=:all: --no-cache-dir \
     numpy scipy pandas scikit-learn
 
-# Install remaining dependencies with binary preference
+# Install FlagEmbedding separately with more flexible options
+RUN echo "Installing FlagEmbedding..." && \
+    (pip install --break-system-packages --prefer-binary --no-cache-dir FlagEmbedding || \
+     pip install --break-system-packages --no-cache-dir FlagEmbedding || \
+     pip install --break-system-packages --no-deps --no-cache-dir FlagEmbedding) && \
+    echo "FlagEmbedding installation completed"
+
+# Install embedding requirements (excluding any packages already installed)
 RUN echo "Installing embedding requirements..." && \
     pip install -r embedding/requirements.txt --break-system-packages --prefer-binary --no-cache-dir
 
+# Install reranking requirements (excluding FlagEmbedding since it's already installed)
 RUN echo "Installing reranking requirements..." && \
-    pip install -r reranking/requirements.txt --break-system-packages --prefer-binary --no-cache-dir
+    grep -v "FlagEmbedding" reranking/requirements.txt > /tmp/reranking_no_flag.txt && \
+    pip install -r /tmp/reranking_no_flag.txt --break-system-packages --prefer-binary --no-cache-dir
 
 RUN echo "Installing rag_server requirements..." && \
     pip install -r rag_server/requirements.txt --break-system-packages --prefer-binary --no-cache-dir
