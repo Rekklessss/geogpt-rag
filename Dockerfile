@@ -43,7 +43,7 @@ RUN apt-get update && apt-get install -y \
 
 # Set up Python
 RUN ln -sf /usr/bin/python3 /usr/bin/python
-RUN python3 -m pip install --break-system-packages --upgrade pip setuptools wheel
+# Skip pip upgrade - Ubuntu 24.04 pip 24.0 is sufficient and avoids debian package conflicts
 
 # Set working directory
 WORKDIR /app
