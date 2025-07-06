@@ -40,7 +40,7 @@ cd "$PROJECT_DIR" || {
 
 # Stop all services
 echo "⏹️  Stopping all services..."
-docker-compose down --remove-orphans 2>/dev/null || echo "No services to stop"
+sudo docker-compose down --remove-orphans 2>/dev/null || echo "No services to stop"
 
 # Stop systemd service
 echo "⏹️  Stopping systemd service..."
@@ -48,15 +48,15 @@ sudo systemctl stop geogpt-rag.service 2>/dev/null || echo "Systemd service not 
 
 # Remove all Docker containers (including stopped ones)
 echo "🗑️  Removing all Docker containers..."
-docker ps -aq | xargs -r docker rm -f 2>/dev/null || echo "No containers to remove"
+sudo docker ps -aq | xargs -r sudo docker rm -f 2>/dev/null || echo "No containers to remove"
 
 # Remove all Docker images related to the project
 echo "🗑️  Removing Docker images..."
-docker images | grep -E "(geogpt|rag)" | awk '{print $3}' | xargs -r docker rmi -f 2>/dev/null || echo "No project images to remove"
+sudo docker images | grep -E "(geogpt|rag)" | awk '{print $3}' | xargs -r sudo docker rmi -f 2>/dev/null || echo "No project images to remove"
 
 # Remove all unused Docker images, containers, networks, and volumes
 echo "🗑️  Cleaning up Docker system..."
-docker system prune -af --volumes 2>/dev/null || echo "Docker system cleanup completed"
+sudo docker system prune -af --volumes 2>/dev/null || echo "Docker system cleanup completed"
 
 # Remove downloaded models
 echo "🗑️  Removing downloaded models..."
@@ -77,7 +77,7 @@ sudo rm -rf /app/split_chunks/ 2>/dev/null || echo "No app split_chunks to remov
 
 # Remove any leftover Docker volumes
 echo "🗑️  Removing Docker volumes..."
-docker volume ls -q | xargs -r docker volume rm 2>/dev/null || echo "No volumes to remove"
+sudo docker volume ls -q | xargs -r sudo docker volume rm 2>/dev/null || echo "No volumes to remove"
 
 # Clean up any leftover files
 echo "🗑️  Cleaning up temporary files..."
@@ -106,11 +106,11 @@ chmod +x scripts/*.sh
 
 # Rebuild Docker images (no cache)
 echo "🔨 Rebuilding Docker images from scratch..."
-docker-compose build --no-cache --pull
+sudo docker-compose build --no-cache --pull
 
 # Start services
 echo "🚀 Starting services..."
-docker-compose up -d
+sudo docker-compose up -d
 
 # Wait for services to initialize
 echo "⏳ Waiting for services to initialize..."
@@ -148,7 +148,7 @@ RERANKING_STATUS=$?
 
 # Run system tests
 echo "🧪 Running system tests..."
-if docker exec geogpt-rag-system python /app/scripts/test_system.py; then
+if sudo docker exec geogpt-rag-system python /app/scripts/test_system.py; then
     echo "✅ System tests passed!"
     TEST_STATUS=0
 else
@@ -201,10 +201,10 @@ fi
 
 echo ""
 echo "🔍 To view real-time logs:"
-echo "   docker-compose logs -f"
+echo "   sudo docker-compose logs -f"
 echo ""
 echo "📊 To monitor system status:"
 echo "   ~/monitor_geogpt.sh"
 echo ""
 echo "🐳 Docker containers:"
-docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 
+sudo docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 

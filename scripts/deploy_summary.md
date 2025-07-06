@@ -36,7 +36,7 @@ curl http://localhost:8811/health  # Reranking service
 ~/monitor_geogpt.sh
 
 # View logs
-docker-compose logs -f
+sudo docker-compose logs -f
 ```
 
 ## Configuration Summary
@@ -92,9 +92,9 @@ print(f"Answer: {answer}")
 ## Troubleshooting
 
 ### Common Issues
-1. **Models not downloading**: Run `docker exec -it geogpt-rag-system /app/scripts/download_models.sh`
+1. **Models not downloading**: Run `cd ~/geogpt-rag && ./scripts/cleanup_redeploy.sh`
 2. **GPU not detected**: Check with `nvidia-smi` and restart Docker
-3. **Services not starting**: Check logs with `docker-compose logs -f`
+3. **Services not starting**: Check logs with `sudo docker-compose logs -f`
 4. **Zilliz connection**: Verify credentials in `rag_server/config.py`
 5. **Sagemaker issues**: Test with `aws sts get-caller-identity`
 

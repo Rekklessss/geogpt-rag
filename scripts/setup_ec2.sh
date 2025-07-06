@@ -134,8 +134,8 @@ RemainAfterExit=yes
 WorkingDirectory=$PROJECT_DIR
 ExecStart=/usr/local/bin/docker-compose up -d
 ExecStop=/usr/local/bin/docker-compose down
-User=ubuntu
-Group=ubuntu
+User=root
+Group=root
 
 [Install]
 WantedBy=multi-user.target
@@ -148,11 +148,12 @@ sudo systemctl enable geogpt-rag.service
 echo "🔨 Building and starting services..."
 echo "This may take a while as it downloads models (~7GB)..."
 
+# Use sudo for Docker commands since group membership needs a new shell session
 # Build Docker images
-docker-compose build
+sudo docker-compose build
 
 # Start services in detached mode
-docker-compose up -d
+sudo docker-compose up -d
 
 echo "⏳ Waiting for services to initialize..."
 sleep 30
@@ -189,7 +190,7 @@ RERANKING_STATUS=$?
 
 # Run system tests
 echo "🧪 Running system tests..."
-if docker exec geogpt-rag-system python /app/scripts/test_system.py; then
+if sudo docker exec geogpt-rag-system python /app/scripts/test_system.py; then
     echo "✅ System tests passed!"
     TEST_STATUS=0
 else
@@ -203,7 +204,7 @@ cat > ~/monitor_geogpt.sh << 'EOF'
 #!/bin/bash
 echo "=== GeoGPT-RAG System Status ==="
 echo "🐳 Docker containers:"
-docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+sudo docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 echo ""
 echo "🎮 GPU status:"
 nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu --format=csv,noheader,nounits
@@ -216,8 +217,8 @@ echo "💾 Disk usage:"
 df -h /
 echo ""
 echo "🔍 Recent logs:"
-echo "Embedding: docker logs --tail 5 geogpt-rag-system 2>/dev/null | grep embedding || echo 'No embedding logs'"
-echo "Reranking: docker logs --tail 5 geogpt-rag-system 2>/dev/null | grep reranking || echo 'No reranking logs'"
+echo "Embedding: sudo docker logs --tail 5 geogpt-rag-system 2>/dev/null | grep embedding || echo 'No embedding logs'"
+echo "Reranking: sudo docker logs --tail 5 geogpt-rag-system 2>/dev/null | grep reranking || echo 'No reranking logs'"
 echo ""
 echo "📊 System resources:"
 echo "Memory: $(free -h | grep Mem | awk '{print $3 "/" $2}')"
@@ -268,5 +269,9 @@ fi
 echo ""
 echo "🔄 To redeploy after code changes:"
 echo "   cd $PROJECT_DIR && ./scripts/cleanup_redeploy.sh"
+echo ""
+echo "💡 Note: Docker group membership is active. For regular docker commands without sudo:"
+echo "   - Either use: sudo docker <command>"
+echo "   - Or log out and back in to refresh group membership"
 echo ""
 echo "📚 For detailed usage examples, see: DEPLOYMENT_README.md" 

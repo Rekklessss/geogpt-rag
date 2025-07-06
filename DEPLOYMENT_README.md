@@ -22,6 +22,8 @@ The GeoGPT-RAG system consists of three main components:
 
 ## Quick Start - Simplified Two-Script Deployment
 
+> **Note**: This deployment uses `sudo` for Docker commands during initial setup. After setup completes, you can either continue using `sudo docker` or log out and back in to use Docker without sudo.
+
 ### 1. Initial Setup (Run Once)
 
 ```bash
@@ -59,7 +61,7 @@ curl http://localhost:8811/health  # Reranking service
 ~/monitor_geogpt.sh
 
 # View logs
-docker-compose logs -f
+sudo docker-compose logs -f
 ```
 
 ## Simplified Two-Script Approach
@@ -189,8 +191,7 @@ curl http://localhost:8811/health  # Reranking service
 ### Log Monitoring
 ```bash
 # View service logs
-docker-compose logs embedding-service
-docker-compose logs reranking-service
+sudo docker-compose logs geogpt-rag
 
 # View system logs
 tail -f ~/geogpt-rag/logs/embedding.log
@@ -203,7 +204,7 @@ tail -f ~/geogpt-rag/logs/reranking.log
 nvidia-smi
 
 # Container resources
-docker stats
+sudo docker stats
 
 # System resources
 htop
@@ -234,10 +235,10 @@ htop
 3. **Services not starting**
    ```bash
    # Check container logs
-   docker-compose logs -f
+   sudo docker-compose logs -f
    
    # Restart services
-   docker-compose restart
+   sudo docker-compose restart
    ```
 
 4. **Zilliz connection issues**
