@@ -4,6 +4,11 @@ FROM nvidia/cuda:12.8.0-cudnn-devel-ubuntu24.04
 ENV PYTHONPATH=/app
 ENV DEBIAN_FRONTEND=noninteractive
 ENV CUDA_VISIBLE_DEVICES=0
+# Force pip to use binary wheels and not compile from source
+ENV PIP_ONLY_BINARY=:all:
+ENV PIP_PREFER_BINARY=1
+ENV GRPC_PYTHON_BUILD_SYSTEM_OPENSSL=1
+ENV GRPC_PYTHON_BUILD_SYSTEM_ZLIB=1
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -33,20 +38,33 @@ COPY embedding/requirements.txt /app/embedding/requirements.txt
 COPY reranking/requirements.txt /app/reranking/requirements.txt
 COPY rag_server/requirements.txt /app/rag_server/requirements.txt
 
-# Install Python dependencies with optimizations
-# First install common dependencies that might need compilation
-RUN pip install --break-system-packages --only-binary=all --no-cache-dir \
-    torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 || \
-    pip install --break-system-packages --no-cache-dir torch torchvision torchaudio
+# Install grpcio first with multiple fallback strategies
+RUN echo "Installing grpcio with aggressive binary-only approach..." && \
+    (pip install --break-system-packages --only-binary=:all: --no-cache-dir grpcio==1.60.1 || \
+     pip install --break-system-packages --only-binary=grpcio --no-cache-dir grpcio==1.60.1 || \
+     pip install --break-system-packages --prefer-binary --no-cache-dir grpcio==1.60.1 || \
+     pip install --break-system-packages --no-cache-dir --force-reinstall --no-deps grpcio==1.60.1) && \
+    echo "grpcio installation completed"
 
-# Install grpcio separately with pre-compiled wheel
-RUN pip install --break-system-packages --only-binary=grpcio --no-cache-dir grpcio || \
-    pip install --break-system-packages --no-cache-dir grpcio
+# Install PyTorch with CUDA support
+RUN echo "Installing PyTorch..." && \
+    pip install --break-system-packages --only-binary=:all: --no-cache-dir \
+    torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
-# Install remaining dependencies
-RUN pip install -r embedding/requirements.txt --break-system-packages --no-cache-dir
-RUN pip install -r reranking/requirements.txt --break-system-packages --no-cache-dir  
-RUN pip install -r rag_server/requirements.txt --break-system-packages --no-cache-dir
+# Install other common problematic packages with binary-only approach
+RUN echo "Installing other binary packages..." && \
+    pip install --break-system-packages --only-binary=:all: --no-cache-dir \
+    numpy scipy pandas scikit-learn
+
+# Install remaining dependencies with binary preference
+RUN echo "Installing embedding requirements..." && \
+    pip install -r embedding/requirements.txt --break-system-packages --prefer-binary --no-cache-dir
+
+RUN echo "Installing reranking requirements..." && \
+    pip install -r reranking/requirements.txt --break-system-packages --prefer-binary --no-cache-dir
+
+RUN echo "Installing rag_server requirements..." && \
+    pip install -r rag_server/requirements.txt --break-system-packages --prefer-binary --no-cache-dir
 
 # Copy source code
 COPY . /app/
