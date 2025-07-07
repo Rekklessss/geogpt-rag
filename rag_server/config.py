@@ -14,7 +14,7 @@ CONNECTION_ARGS = {
     'uri': 'https://in03-0beed7b5287844d.serverless.gcp-us-west1.cloud.zilliz.com',
     'token': 'affa13223a768e6e16b4e2bebf1e3f95b7b9085814d1407470c10922c7469d459cf523c189e99e24a20a1146976edd1a808d34fc',
 }
-COLLECTION_NAME = "GeoGPT_Knowledge_Base"
+COLLECTION_NAME = "geodocs"
 
 # rerank config
 VEC_RECALL_NUM = 128

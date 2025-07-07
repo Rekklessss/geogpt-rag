@@ -88,6 +88,7 @@ sudo rm -rf .pytest_cache/ 2>/dev/null || echo "No pytest cache to remove"
 
 # Pull latest code from GitHub
 echo "📥 Pulling latest code from GitHub..."
+git lfs install
 git fetch origin
 git reset --hard origin/main
 git clean -fd
@@ -168,8 +169,8 @@ echo "📊 Monitor System: ~/monitor_geogpt.sh"
 echo "🔄 Redeploy Again: cd $PROJECT_DIR && ./scripts/cleanup_redeploy.sh"
 echo ""
 echo "🌐 Service URLs:"
-echo "  - Embedding Service: http://3.233.224.145:8810"
-echo "  - Reranking Service: http://3.233.224.145:8811"
+echo "  - Embedding Service: http://3.234.222.18:8810"
+echo "  - Reranking Service: http://3.234.222.18:8811"
 echo ""
 echo "📋 Service Status:"
 if [ $EMBEDDING_STATUS -eq 0 ]; then

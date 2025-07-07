@@ -25,6 +25,9 @@ services:
       - ~/.aws:/root/.aws:ro  # AWS credentials
     command: >
       bash -c "
+        # Set up Git LFS
+        git lfs install
+        
         # Create necessary directories
         mkdir -p /app/models/geo-embedding /app/models/geo-reranker /app/logs
         
@@ -32,26 +35,62 @@ services:
         if [ ! -f /app/models/geo-embedding/config.json ]; then
           echo 'Downloading GeoEmbedding model...'
           cd /app/models/geo-embedding
-          git clone https://huggingface.co/GeoGPT-Research-Project/GeoEmbedding . || echo 'Model download failed'
+          git lfs install
+          git clone https://huggingface.co/GeoGPT-Research-Project/GeoEmbedding . 2>&1 | tee /app/logs/embedding_download.log
+          if [ $? -ne 0 ]; then
+            echo 'Model download failed, trying alternative method...'
+            rm -rf * .*
+            git init
+            git remote add origin https://huggingface.co/GeoGPT-Research-Project/GeoEmbedding
+            git lfs track '*.bin' '*.safetensors' '*.gguf' '*.h5' '*.tflite' '*.tar.gz' '*.ot' '*.onnx'
+            git fetch origin main
+            git checkout main
+          fi
         fi
         
         if [ ! -f /app/models/geo-reranker/config.json ]; then
           echo 'Downloading GeoReranker model...'
           cd /app/models/geo-reranker
-          git clone https://huggingface.co/GeoGPT-Research-Project/GeoReranker . || echo 'Model download failed'
+          git lfs install
+          git clone https://huggingface.co/GeoGPT-Research-Project/GeoReranker . 2>&1 | tee /app/logs/reranker_download.log
+          if [ $? -ne 0 ]; then
+            echo 'Model download failed, trying alternative method...'
+            rm -rf * .*
+            git init
+            git remote add origin https://huggingface.co/GeoGPT-Research-Project/GeoReranker
+            git lfs track '*.bin' '*.safetensors' '*.gguf' '*.h5' '*.tflite' '*.tar.gz' '*.ot' '*.onnx'
+            git fetch origin main
+            git checkout main
+          fi
+        fi
+        
+        # Verify models are downloaded
+        echo 'Verifying model downloads...'
+        if [ -f /app/models/geo-embedding/config.json ]; then
+          echo 'GeoEmbedding model downloaded successfully'
+        else
+          echo 'WARNING: GeoEmbedding model not found'
+        fi
+        
+        if [ -f /app/models/geo-reranker/config.json ]; then
+          echo 'GeoReranker model downloaded successfully'
+        else
+          echo 'WARNING: GeoReranker model not found'
         fi
         
         # Start embedding service in background
         cd /app/embedding
+        echo 'Starting embedding service...'
         python embedding_api.py --model_path /app/models/geo-embedding --port 8810 --fp16 > /app/logs/embedding.log 2>&1 &
         
         # Start reranking service in background
         cd /app/reranking
+        echo 'Starting reranking service...'
         python reranker_fast_api.py --model_path /app/models/geo-reranker --port 8811 > /app/logs/reranking.log 2>&1 &
         
         # Wait for services to start
         echo 'Waiting for services to initialize...'
-        sleep 30
+        sleep 60
         
         # Keep container running
         wait

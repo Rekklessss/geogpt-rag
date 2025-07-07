@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y \
     python3-setuptools \
     python3-wheel \
     git \
+    git-lfs \
     build-essential \
     cmake \
     pkg-config \
@@ -41,9 +42,9 @@ RUN apt-get update && apt-get install -y \
     gfortran \
     && rm -rf /var/lib/apt/lists/*
 
-# Set up Python
+# Set up Python and Git LFS
 RUN ln -sf /usr/bin/python3 /usr/bin/python
-# Skip pip upgrade - Ubuntu 24.04 pip 24.0 is sufficient and avoids debian package conflicts
+RUN git lfs install
 
 # Set working directory
 WORKDIR /app
@@ -98,7 +99,8 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir \
     requests>=2.31.0 \
     pymilvus>=2.4.0 \
     nltk>=3.8.1 \
-    boto3>=1.34.0
+    boto3>=1.34.0 \
+    tiktoken>=0.5.0
 
 # Copy source code
 COPY . /app/
