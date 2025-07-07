@@ -90,7 +90,8 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir \
 
 # Install reranking requirements (excluding FlagEmbedding since it's already installed)
 RUN python3 -m pip install --break-system-packages --no-cache-dir \
-    sentencepiece==0.1.99
+    sentencepiece==0.1.99 \
+    protobuf==3.20.3
 
 # Install rag_server requirements (Python 3.12 compatible)
 RUN python3 -m pip install --break-system-packages --no-cache-dir \
