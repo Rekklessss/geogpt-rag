@@ -112,7 +112,7 @@ class KBDocQA:
                 "index_type": "HNSW",
                 "params": {"M": 8, "efConstruction": 64},
             },
-            drop_old=False,
+            drop_old=True,  # Drop existing collection to recreate with correct dimensions
             auto_id=True
         )
 
