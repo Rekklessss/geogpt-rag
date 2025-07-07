@@ -88,7 +88,6 @@ sudo rm -rf .pytest_cache/ 2>/dev/null || echo "No pytest cache to remove"
 
 # Pull latest code from GitHub
 echo "📥 Pulling latest code from GitHub..."
-git lfs install
 git fetch origin
 git reset --hard origin/main
 git clean -fd
