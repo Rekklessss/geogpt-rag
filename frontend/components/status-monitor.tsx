@@ -223,7 +223,7 @@ export function StatusMonitor({ isVisible, onToggle, className }: StatusMonitorP
             responseTime: systemStatus.services.codeExecution?.responseTime || 0,
             uptime: systemStatus.services.codeExecution?.uptime || 0,
             lastChecked: new Date(systemStatus.services.codeExecution?.lastCheck || Date.now()),
-            endpoint: 'localhost:8812',
+            endpoint: '3.234.222.18:8812',
             icon: <Zap className="h-4 w-4" />,
             description: 'Python code execution environment',
             metrics: {

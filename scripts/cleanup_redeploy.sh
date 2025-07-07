@@ -112,8 +112,25 @@ sudo docker-compose build --no-cache --pull
 echo "🚀 Starting services..."
 sudo docker-compose up -d
 
-# Wait for services to initialize (services need ~60 seconds to download models and start)
-echo "⏳ Waiting for services to initialize..."
+# Wait for services to initialize (services need time to download models and start)
+echo "⏳ Waiting for container to start and models to download..."
+echo "   This may take 5-10 minutes for first-time model downloads (~6GB total)"
+sleep 30
+
+# Check if models are being downloaded
+echo "📥 Checking model download progress..."
+for i in {1..20}; do
+    if sudo docker exec geogpt-rag-system ls /app/models/geo-embedding/config.json >/dev/null 2>&1 && \
+       sudo docker exec geogpt-rag-system ls /app/models/geo-reranker/config.json >/dev/null 2>&1; then
+        echo "✅ Models downloaded successfully"
+        break
+    fi
+    echo "⏳ Models still downloading... (check $i/20)"
+    sleep 30
+done
+
+# Additional wait for services to start after models are downloaded
+echo "⏳ Waiting for services to initialize with downloaded models..."
 sleep 60
 
 # Check service health
@@ -121,20 +138,26 @@ echo "🏥 Checking service health..."
 check_service() {
     local port=$1
     local service_name=$2
-    local max_attempts=30
+    local max_attempts=20
     local attempt=1
     
     while [ $attempt -le $max_attempts ]; do
-        if curl -f "http://localhost:$port/health" 2>/dev/null; then
+        if curl -f -s "http://localhost:$port/health" >/dev/null 2>&1; then
             echo "✅ $service_name is ready"
             return 0
         fi
         echo "⏳ Waiting for $service_name... (attempt $attempt/$max_attempts)"
-        sleep 10
+        sleep 15
         ((attempt++))
     done
     
-    echo "❌ $service_name failed to start"
+    echo "❌ $service_name failed to start after $((max_attempts * 15)) seconds"
+    echo "🔍 Checking $service_name logs:"
+    case $port in
+        8810) sudo docker exec geogpt-rag-system tail -n 5 /app/logs/embedding.log 2>/dev/null || echo "No embedding logs found" ;;
+        8811) sudo docker exec geogpt-rag-system tail -n 5 /app/logs/reranking.log 2>/dev/null || echo "No reranking logs found" ;;
+        8812) sudo docker exec geogpt-rag-system tail -n 5 /app/logs/geogpt_api.log 2>/dev/null || echo "No API logs found" ;;
+    esac
     return 1
 }
 

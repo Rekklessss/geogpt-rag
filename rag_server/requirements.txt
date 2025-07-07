@@ -11,7 +11,7 @@ grpcio==1.60.1
 fastapi==0.104.1
 uvicorn==0.24.0
 python-multipart==0.0.6
-duckduckgo-search==6.1.12
+duckduckgo-search==8.1.1
 beautifulsoup4==4.12.3
 wikipedia==1.4.0
 docker==7.0.0

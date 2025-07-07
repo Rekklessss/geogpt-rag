@@ -103,6 +103,14 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir \
     boto3>=1.34.0 \
     tiktoken>=0.5.0
 
+# Install ALL remaining requirements from rag_server/requirements.txt
+RUN python3 -m pip install --break-system-packages --no-cache-dir \
+    python-multipart>=0.0.6 \
+    wikipedia==1.4.0 \
+    duckduckgo-search==8.1.1 \
+    beautifulsoup4==4.12.3 \
+    docker>=7.0.0
+
 # Copy source code
 COPY . /app/
 
