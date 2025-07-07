@@ -88,6 +88,11 @@ services:
         echo 'Starting reranking service...'
         python reranker_fast_api.py --model_path /app/models/geo-reranker --port 8811 > /app/logs/reranking.log 2>&1 &
         
+        # Start GeoGPT API service in background
+        cd /app/rag_server
+        echo 'Starting GeoGPT API service...'
+        python geogpt_api.py > /app/logs/geogpt_api.log 2>&1 &
+        
         # Wait for services to start
         echo 'Waiting for services to initialize...'
         sleep 60

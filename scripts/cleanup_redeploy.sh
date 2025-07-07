@@ -112,9 +112,9 @@ sudo docker-compose build --no-cache --pull
 echo "🚀 Starting services..."
 sudo docker-compose up -d
 
-# Wait for services to initialize
+# Wait for services to initialize (services need ~60 seconds to download models and start)
 echo "⏳ Waiting for services to initialize..."
-sleep 30
+sleep 60
 
 # Check service health
 echo "🏥 Checking service health..."
@@ -146,6 +146,10 @@ EMBEDDING_STATUS=$?
 check_service 8811 "Reranking Service"
 RERANKING_STATUS=$?
 
+# Check GeoGPT API service
+check_service 8812 "GeoGPT API Service"
+GEOGPT_STATUS=$?
+
 # Run system tests
 echo "🧪 Running system tests..."
 if sudo docker exec geogpt-rag-system python /app/scripts/test_system.py; then
@@ -156,6 +160,16 @@ else
     TEST_STATUS=1
 fi
 
+# Run comprehensive GeoGPT API tests (includes implementation verification)
+echo "🚀 Running comprehensive GeoGPT API tests..."
+if sudo docker exec geogpt-rag-system python /app/scripts/test_geogpt_api.py; then
+    echo "✅ GeoGPT API tests passed!"
+    GEOGPT_TEST_STATUS=0
+else
+    echo "❌ GeoGPT API tests failed!"
+    GEOGPT_TEST_STATUS=1
+fi
+
 # Restart systemd service
 echo "🚀 Restarting systemd service..."
 sudo systemctl restart geogpt-rag.service
@@ -164,12 +178,12 @@ sudo systemctl restart geogpt-rag.service
 echo ""
 echo "=== Redeploy Summary ==="
 echo "🏠 Project Directory: $PROJECT_DIR"
-echo "📊 Monitor System: ~/monitor_geogpt.sh"
 echo "🔄 Redeploy Again: cd $PROJECT_DIR && ./scripts/cleanup_redeploy.sh"
 echo ""
 echo "🌐 Service URLs:"
 echo "  - Embedding Service: http://3.234.222.18:8810"
 echo "  - Reranking Service: http://3.234.222.18:8811"
+echo "  - GeoGPT API Service: http://3.234.222.18:8812"
 echo ""
 echo "📋 Service Status:"
 if [ $EMBEDDING_STATUS -eq 0 ]; then
@@ -184,16 +198,29 @@ else
     echo "  ❌ Reranking Service: Failed"
 fi
 
+if [ $GEOGPT_STATUS -eq 0 ]; then
+    echo "  ✅ GeoGPT API Service: Running"
+else
+    echo "  ❌ GeoGPT API Service: Failed"
+fi
+
 if [ $TEST_STATUS -eq 0 ]; then
     echo "  ✅ System Tests: Passed"
 else
     echo "  ❌ System Tests: Failed"
 fi
 
+if [ $GEOGPT_TEST_STATUS -eq 0 ]; then
+    echo "  ✅ GeoGPT API Tests (with verification): Passed"
+else
+    echo "  ❌ GeoGPT API Tests (with verification): Failed"
+fi
+
 echo ""
-if [ $EMBEDDING_STATUS -eq 0 ] && [ $RERANKING_STATUS -eq 0 ] && [ $TEST_STATUS -eq 0 ]; then
+if [ $EMBEDDING_STATUS -eq 0 ] && [ $RERANKING_STATUS -eq 0 ] && [ $GEOGPT_STATUS -eq 0 ] && [ $TEST_STATUS -eq 0 ] && [ $GEOGPT_TEST_STATUS -eq 0 ]; then
     echo "🎉 GeoGPT-RAG redeploy completed successfully!"
     echo "💡 The system is ready to use with the latest code changes."
+    echo "🔗 All services are online and integrated - NO MOCK DATA!"
 else
     echo "⚠️ Redeploy completed with some issues. Check logs for details:"
     echo "   docker-compose logs -f"
@@ -204,7 +231,7 @@ echo "🔍 To view real-time logs:"
 echo "   sudo docker-compose logs -f"
 echo ""
 echo "📊 To monitor system status:"
-echo "   ~/monitor_geogpt.sh"
+echo "   sudo docker ps && curl -s http://localhost:8812/health"
 echo ""
 echo "🐳 Docker containers:"
 sudo docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 

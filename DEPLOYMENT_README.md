@@ -1,47 +1,69 @@
-# GeoGPT-RAG EC2 Deployment Guide
+# GeoGPT-RAG Deployment Guide
 
-This guide provides step-by-step instructions for deploying the GeoGPT-RAG system on an AWS EC2 g5.xlarge instance.
+## Quick Start - One Script Deployment
 
-## System Overview
+This guide provides streamlined deployment of the GeoGPT-RAG system on AWS EC2 g5.xlarge using a single comprehensive script.
 
-The GeoGPT-RAG system consists of three main components:
-1. **Embedding Service** - GeoEmbedding model (7B parameters) on port 8810
-2. **Reranking Service** - GeoReranker model (568M parameters) on port 8811  
-3. **RAG Server** - Main orchestration service connecting to Zilliz Cloud and AWS Sagemaker
+### Prerequisites
 
-## Prerequisites
+- **AWS EC2 g5.xlarge instance** (already configured)
+- **Instance Details**:
+  - Instance ID: `i-01089964a2f322781`
+  - Public IP: `3.234.222.18`
+  - Private IP: `172.31.76.142`
+  - IAM Role: `GeoGPT-Custom-Role-EC2`
+- **External Services**: AWS Sagemaker and Zilliz Cloud configured
 
-- AWS EC2 g5.xlarge instance (already configured)
-- Instance details:
-  - **Instance ID**: i-01089964a2f322781
-  - **Public IP**: 3.233.224.145
-  - **Private IP**: 172.31.76.142
-  - **IAM Role**: GeoGPT-Custom-Role-EC2
-- AWS Sagemaker endpoint configured
-- Zilliz Cloud database configured
+## System Architecture
 
-## Quick Start - Simplified Two-Script Deployment
-
-> **Note**: This deployment uses `sudo` for Docker commands during initial setup. After setup completes, you can either continue using `sudo docker` or log out and back in to use Docker without sudo.
-
-### 1. Initial Setup (Run Once)
-
-```bash
-# Connect to EC2 instance
-ssh -i geogpt-ec2.pem ubuntu@3.233.224.145
-
-# Clone repository and run complete setup
-curl -fsSL https://raw.githubusercontent.com/Rekklessss/geogpt-rag/main/scripts/setup_ec2.sh | bash
-
-# Or manually:
-git clone https://github.com/Rekklessss/geogpt-rag.git ~/geogpt-rag
-cd ~/geogpt-rag
-chmod +x scripts/setup_ec2.sh
-./scripts/setup_ec2.sh
+```
+┌─────────────────────────────────────────────────────┐
+│              AWS EC2 g5.xlarge Instance             │
+├─────────────────────────────────────────────────────┤
+│  Port 8810: Embedding Service (GeoEmbedding 7B)    │
+│  Port 8811: Reranking Service (GeoReranker 568M)   │
+│  Port 8812: GeoGPT API Service (RAG + Chat)        │
+├─────────────────────────────────────────────────────┤
+│  External: Zilliz Cloud + AWS Sagemaker + Web APIs │
+└─────────────────────────────────────────────────────┘
 ```
 
-### 2. Redeploy After Changes
+## Deployment Scripts
 
+### Single Script Deployment
+
+The system uses **one primary script** for all deployment operations:
+
+#### `scripts/cleanup_redeploy.sh` - Complete Pipeline Management
+
+This script handles:
+- ✅ **Complete system cleanup** (containers, images, volumes)
+- ✅ **Fresh code deployment** from GitHub
+- ✅ **Docker rebuild** and service startup
+- ✅ **Health monitoring** across all three services
+- ✅ **Comprehensive testing** (13 total tests)
+- ✅ **Status reporting** with detailed logs
+
+## Deployment Commands
+
+### 1. SSH Access
+```bash
+ssh -i geogpt-ec2.pem ubuntu@3.234.222.18
+```
+
+### 2. Initial Setup (Run Once)
+```bash
+# Navigate to project directory
+cd ~/geogpt-rag
+
+# Make script executable (if needed)
+chmod +x scripts/cleanup_redeploy.sh
+
+# Run complete deployment
+./scripts/cleanup_redeploy.sh
+```
+
+### 3. Redeploy After Changes (Primary Command)
 ```bash
 # Navigate to project directory
 cd ~/geogpt-rag
@@ -50,292 +72,296 @@ cd ~/geogpt-rag
 ./scripts/cleanup_redeploy.sh
 ```
 
-### 3. Monitor and Verify
-
+### 4. Monitor System Status
 ```bash
-# Check service health
+# Quick health check
 curl http://localhost:8810/health  # Embedding service
 curl http://localhost:8811/health  # Reranking service
+curl http://localhost:8812/health  # GeoGPT API
 
-# Monitor system status
-~/monitor_geogpt.sh
-
-# View logs
+# View service logs
 sudo docker-compose logs -f
+
+# Check container status
+sudo docker ps
 ```
 
-## Simplified Two-Script Approach
+## Script Details
 
-This deployment uses only two scripts:
+### cleanup_redeploy.sh Workflow
 
-1. **`scripts/setup_ec2.sh`** - Complete EC2 environment setup and initial deployment
-   - Installs all dependencies (Docker, NVIDIA toolkit, AWS CLI, etc.)
-   - Clones repository from GitHub
-   - Downloads models and builds containers
-   - Starts all services
-   - Runs system tests
-   - Sets up monitoring
+```bash
+1. Pull Latest Code
+   ├─ Git pull from main branch
+   └─ Update all components
 
-2. **`scripts/cleanup_redeploy.sh`** - Complete cleanup and redeploy
-   - Stops all services
-   - Removes all containers, images, and volumes
-   - Deletes downloaded models and logs
-   - Pulls latest code from GitHub
-   - Rebuilds everything from scratch
-   - Redeploys all services
+2. Complete Cleanup
+   ├─ Stop all Docker containers
+   ├─ Remove containers, images, volumes
+   ├─ Clear model cache
+   └─ Clean log files
 
-## System Architecture
+3. System Rebuild
+   ├─ Docker Compose build
+   ├─ Download required models
+   ├─ Start all services (8810, 8811, 8812)
+   └─ Wait for service initialization
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        AWS EC2 g5.xlarge                       │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
-│  │  Embedding      │  │  Reranking      │  │  RAG Server     │ │
-│  │  Service        │  │  Service        │  │                 │ │
-│  │  :8810          │  │  :8811          │  │                 │ │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
-├─────────────────────────────────────────────────────────────────┤
-│                       External Services                        │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
-│  │  Zilliz Cloud   │  │  AWS Sagemaker  │  │  Load Balancer  │ │
-│  │  Vector DB      │  │  LLM Endpoint   │  │  (Optional)     │ │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
-└─────────────────────────────────────────────────────────────────┘
+4. Health Verification
+   ├─ Check all three service health endpoints
+   ├─ Verify external service connectivity
+   └─ Monitor startup logs
+
+5. Comprehensive Testing
+   ├─ Run all 13 test cases
+   ├─ Validate API functionality
+   ├─ Verify integration workflows
+   └─ Security and implementation checks
+
+6. Status Reporting
+   ├─ Display service status
+   ├─ Show test results
+   ├─ Report any issues
+   └─ Provide next steps
 ```
 
-## Configuration Details
+### Test Coverage (13 Tests)
 
-### Zilliz Cloud Configuration
-- **URI**: `https://in03-0beed7b5287844d.serverless.gcp-us-west1.cloud.zilliz.com`
-- **Collection**: `GeoGPT_Knowledge_Base`
-- **Vector Index**: HNSW with COSINE similarity
+**Functional Tests (6)**:
+1. ✅ Health check endpoints
+2. ✅ Chat functionality with RAG
+3. ✅ Deep discovery process
+4. ✅ Code execution sandbox
+5. ✅ Web search integration
+6. ✅ Complete workflow validation
 
-### AWS Sagemaker Configuration  
-- **Endpoint**: `GeoGPT-R1-Sagemaker-Endpoint`
-- **Region**: `us-east-1`
-- **Authentication**: IAM Role (GeoGPT-Custom-Role-EC2)
+**Verification Tests (7)**:
+1. ✅ Mock data detection
+2. ✅ Security pattern validation
+3. ✅ Dependency verification
+4. ✅ Real implementation checks
+5. ✅ Best practices audit
+6. ✅ Documentation compliance
+7. ✅ Production readiness
 
-### Service Ports
-- **8810**: Embedding Service
-- **8811**: Reranking Service
-- **8812**: RAG Server (if needed)
-- **80/443**: Load Balancer (optional)
+## Service Configuration
 
-## Usage Examples
+### Port Mapping
+- **8810**: Embedding Service (GeoEmbedding model)
+- **8811**: Reranking Service (GeoReranker model)  
+- **8812**: GeoGPT API Service (Main orchestration)
 
-### 1. Using the RAG System Programmatically
+### External Service Integration
+- **Zilliz Cloud**: Vector database for document storage
+- **AWS Sagemaker**: GeoGPT LLM endpoint
+- **Web APIs**: DuckDuckGo search and Wikipedia
 
-```python
-from rag_server.geo_kb import KBDocQA
-
-# Initialize the RAG system
-kb_server = KBDocQA()
-
-# Add documents to the knowledge base
-kb_server.add_file("your_document.mmd", max_size=512)
-
-# Query the system
-docs, answer = kb_server.query("What is geospatial analysis?")
-print(f"Answer: {answer}")
-print(f"Supporting documents: {len(docs)}")
-```
-
-### 2. Using the Embedding Service API
-
-```python
-import requests
-import json
-
-# Test embedding
-response = requests.post("http://localhost:8810/query", json={
-    "queries": ["What causes earthquakes?"],
-    "instruction": "Given a web search query, retrieve relevant passages"
-})
-
-embeddings = json.loads(response.json()["q_embeddings"])
-print(f"Embedding dimensions: {len(embeddings[0])}")
-```
-
-### 3. Using the Reranking Service API
-
-```python
-import requests
-import json
-
-# Test reranking
-response = requests.post("http://localhost:8811/query", json={
-    "qp_pairs": [
-        ["What causes earthquakes?", "Earthquakes are caused by tectonic plates"],
-        ["What causes earthquakes?", "Mountains are formed by geological processes"]
-    ]
-})
-
-scores = json.loads(response.json()["pred_scores"])
-print(f"Relevance scores: {scores}")
+### Docker Configuration
+```yaml
+# Key docker-compose.yml settings
+services:
+  geogpt-rag:
+    ports:
+      - "8810:8810"  # Embedding
+      - "8811:8811"  # Reranking
+      - "8812:8812"  # Main API
+    volumes:
+      - ./models:/app/models
+      - ./logs:/app/logs
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
 ```
 
 ## Monitoring and Maintenance
 
-### Health Checks
+### Health Monitoring
 ```bash
-# Check service health
-curl http://localhost:8810/health  # Embedding service
-curl http://localhost:8811/health  # Reranking service
-
-# Check system status
-~/monitor_geogpt.sh
+# Check all services at once
+for port in 8810 8811 8812; do
+  echo "Checking port $port:"
+  curl -s http://localhost:$port/health | jq .status || echo "Service unavailable"
+done
 ```
 
-### Log Monitoring
+### Log Management
 ```bash
-# View service logs
+# View real-time logs
+sudo docker-compose logs -f
+
+# Check specific service logs
 sudo docker-compose logs geogpt-rag
 
-# View system logs
-tail -f ~/geogpt-rag/logs/embedding.log
-tail -f ~/geogpt-rag/logs/reranking.log
+# Monitor system resources
+nvidia-smi                    # GPU usage
+sudo docker stats            # Container resources
 ```
 
 ### Performance Monitoring
 ```bash
 # GPU utilization
-nvidia-smi
+watch -n 1 nvidia-smi
 
-# Container resources
-sudo docker stats
+# Container resource usage
+sudo docker stats --no-stream
 
-# System resources
-htop
+# Disk space
+df -h
 ```
 
 ## Troubleshooting
 
-### Common Issues
+### Common Issues and Solutions
 
-1. **Models not downloading**
-   ```bash
-   # Check if models exist
-   ls -la ~/geogpt-rag/models/
-   
-   # Force model download by removing and redeploying
-   cd ~/geogpt-rag && ./scripts/cleanup_redeploy.sh
-   ```
+#### 1. Services Not Starting
+```bash
+# Check Docker status
+sudo systemctl status docker
 
-2. **GPU not detected**
-   ```bash
-   # Check NVIDIA driver
-   nvidia-smi
-   
-   # Restart Docker with GPU support
-   sudo systemctl restart docker
-   ```
+# Restart Docker if needed
+sudo systemctl restart docker
 
-3. **Services not starting**
-   ```bash
-   # Check container logs
-   sudo docker-compose logs -f
-   
-   # Restart services
-   sudo docker-compose restart
-   ```
+# Re-run deployment
+./scripts/cleanup_redeploy.sh
+```
 
-4. **Zilliz connection issues**
-   ```bash
-   # Test connection
-   python -c "from rag_server.geo_kb import KBDocQA; kb = KBDocQA(); print('Connected successfully')"
-   ```
+#### 2. GPU Not Detected
+```bash
+# Check NVIDIA driver
+nvidia-smi
 
-5. **Sagemaker endpoint issues**
-   ```bash
-   # Test AWS credentials
-   aws sts get-caller-identity
-   
-   # Test Sagemaker endpoint
-   aws sagemaker describe-endpoint --endpoint-name GeoGPT-R1-Sagemaker-Endpoint
-   ```
+# Verify Docker GPU support
+sudo docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi
 
-### Performance Optimization
+# Restart Docker daemon
+sudo systemctl restart docker
+```
 
-1. **GPU Memory Optimization**
-   - Use FP16 for embedding service: `--fp16` flag
-   - Adjust batch sizes in config.py
-   - Monitor GPU memory usage
+#### 3. Model Download Issues
+```bash
+# Check available disk space
+df -h
 
-2. **Model Loading Optimization**
-   - Pre-download models to reduce startup time
-   - Use model caching
-   - Consider using smaller models for development
+# Manual model verification
+ls -la ~/geogpt-rag/models/
 
-3. **Vector Database Optimization**
-   - Adjust HNSW parameters for better performance
-   - Use appropriate chunk sizes (512 tokens recommended)
-   - Monitor query performance
+# Force complete rebuild
+./scripts/cleanup_redeploy.sh
+```
 
-## Security Considerations
+#### 4. External Service Connectivity
+```bash
+# Test Zilliz connection
+python -c "from rag_server.geo_kb import KBDocQA; kb = KBDocQA(); print('Zilliz OK')"
 
-1. **Network Security**
-   - Use VPC security groups
-   - Limit port access to necessary IPs
-   - Enable SSH key-based authentication
+# Test AWS credentials
+aws sts get-caller-identity
 
-2. **Data Security**
-   - Use HTTPS for external APIs
-   - Encrypt sensitive data in transit
-   - Secure model storage
+# Test Sagemaker endpoint
+aws sagemaker describe-endpoint --endpoint-name GeoGPT-R1-Sagemaker-Endpoint
+```
 
-3. **Access Control**
-   - Use IAM roles for AWS services
-   - Implement API authentication
-   - Monitor access logs
+#### 5. Port Conflicts
+```bash
+# Check port usage
+sudo netstat -tulpn | grep -E ':(8810|8811|8812)'
 
-## Scaling Considerations
+# Kill conflicting processes if needed
+sudo lsof -t -i:8810 | xargs sudo kill -9
+sudo lsof -t -i:8811 | xargs sudo kill -9
+sudo lsof -t -i:8812 | xargs sudo kill -9
+```
 
-1. **Horizontal Scaling**
-   - Use load balancers for multiple instances
-   - Implement service discovery
-   - Use container orchestration (Kubernetes)
+### Debug Commands
+```bash
+# Full system status
+./scripts/cleanup_redeploy.sh 2>&1 | tee deployment.log
 
-2. **Vertical Scaling**
-   - Upgrade to larger EC2 instances
-   - Increase GPU memory
-   - Optimize model serving
+# Check individual components
+docker-compose ps
+docker-compose logs --tail=50 geogpt-rag
 
-3. **Database Scaling**
-   - Use Zilliz Cloud clustering
-   - Implement data partitioning
-   - Monitor database performance
+# Test API endpoints
+python scripts/test_geogpt_api.py
+```
+
+## Production Deployment
+
+### Production URLs
+- **Embedding Service**: `http://3.234.222.18:8810`
+- **Reranking Service**: `http://3.234.222.18:8811`
+- **GeoGPT API**: `http://3.234.222.18:8812`
+
+### Security Considerations
+1. **Network Security**: Configure security groups for specific IP access
+2. **SSL/TLS**: Add HTTPS for production frontend deployment
+3. **Authentication**: Implement API key authentication for production
+4. **Rate Limiting**: Monitor and adjust rate limits based on usage
+5. **Monitoring**: Set up CloudWatch alarms for service health
+
+### Scaling
+- **Horizontal**: Load balance multiple instances
+- **Vertical**: Upgrade to larger GPU instances
+- **Database**: Use Zilliz clustering for high availability
+
+## Backup and Recovery
+
+### Critical Files to Backup
+```bash
+# Configuration files
+rag_server/config.py
+docker-compose.yml
+
+# Model weights (if customized)
+models/
+
+# Logs for troubleshooting
+logs/
+```
+
+### Recovery Process
+```bash
+# Restore from backup
+scp backup-files ubuntu@3.234.222.18:~/geogpt-rag/
+
+# Run deployment script
+./scripts/cleanup_redeploy.sh
+```
 
 ## Support and Maintenance
 
 ### Regular Maintenance Tasks
-- Monitor disk space usage
-- Update system packages
-- Backup model weights
-- Update Docker images
-- Review logs for errors
+- **Weekly**: Monitor disk space and clean old logs
+- **Monthly**: Update system packages and Docker images
+- **Quarterly**: Review and update model versions
 
-### Backup Strategy
-- Backup model weights to S3
-- Export vector database collections
-- Backup configuration files
-- Document deployment procedures
+### Maintenance Commands
+```bash
+# Clean up old Docker images
+sudo docker system prune -a
 
-### Monitoring Alerts
-- Set up CloudWatch alarms
-- Monitor service availability
-- Track resource utilization
-- Alert on error rates
+# Update system packages
+sudo apt update && sudo apt upgrade
 
-## Contact Information
+# Restart services
+./scripts/cleanup_redeploy.sh
+```
 
-For support with this deployment:
-- Project: GeoGPT-MVP
-- Instance: i-01089964a2f322781
-- Deployment Date: January 2025
-- Configuration: g5.xlarge with CUDA 12.8
+### Support Checklist
+1. ✅ Check service health endpoints
+2. ✅ Review Docker container status
+3. ✅ Monitor GPU utilization
+4. ✅ Verify external service connectivity
+5. ✅ Run comprehensive test suite
+6. ✅ Check log files for errors
 
 ---
 
-**Note**: This deployment guide assumes you have the necessary AWS permissions and have configured the required services (Sagemaker, Zilliz Cloud, EC2 IAM roles). 
+## Summary
+
+**Single Script Deployment**: Use `./scripts/cleanup_redeploy.sh` for all deployment needs - it handles everything from cleanup to testing automatically.
+
+**Key Monitoring**: Check ports 8810, 8811, and 8812 for service health.
+
+**Troubleshooting**: Start with the deployment script, then check Docker logs and service health endpoints.
+
+This streamlined approach ensures consistent, reliable deployments with comprehensive testing and monitoring. 
