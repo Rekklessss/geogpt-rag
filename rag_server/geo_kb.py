@@ -7,7 +7,7 @@ from multiprocessing import Process, Queue
 import boto3
 import requests
 
-from langchain.vectorstores import Milvus
+from langchain_community.vectorstores import Milvus
 from pymilvus import Collection
 
 from rag_server.embeddings import GeoEmbeddings

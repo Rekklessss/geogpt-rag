@@ -74,7 +74,7 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir grpcio==1.60.1
 
 # Install transformers and other ML packages (Python 3.12 compatible)
 RUN python3 -m pip install --break-system-packages --no-cache-dir \
-    transformers>=4.40.0 \
+    transformers==4.51.0 \
     tokenizers>=0.15.0 \
     sentence-transformers>=2.6.0 \
     huggingface-hub>=0.20.0
