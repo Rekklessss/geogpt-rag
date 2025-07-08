@@ -10,7 +10,7 @@ REPO_URL="https://github.com/Rekklessss/geogpt-rag.git"
 
 # Configuration - Update this IP address when your EC2 instance restarts
 # You can also set this via environment variable: export GEOGPT_PUBLIC_IP="your.new.ip"
-GEOGPT_PUBLIC_IP="${GEOGPT_PUBLIC_IP:-13.221.48.20}"
+GEOGPT_PUBLIC_IP="${GEOGPT_PUBLIC_IP:-3.81.101.190}"
 
 # API service ports (usually don't change)
 EMBEDDING_PORT="8810"
@@ -23,7 +23,7 @@ get_ip_address() {
         # IP provided via command line argument
         GEOGPT_PUBLIC_IP="$2"
         echo "Using provided IP address: $GEOGPT_PUBLIC_IP"
-    elif [[ -z "$GEOGPT_PUBLIC_IP" ]] || [[ "$GEOGPT_PUBLIC_IP" == "13.221.48.20" ]]; then
+    elif [[ -z "$GEOGPT_PUBLIC_IP" ]] || [[ "$GEOGPT_PUBLIC_IP" == "3.81.101.190" ]]; then
         # No IP set or using default, prompt user
         echo "⚠️  Current IP address: $GEOGPT_PUBLIC_IP"
         echo "💡 If your EC2 instance has a new IP, you can:"
