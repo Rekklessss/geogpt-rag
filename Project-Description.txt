@@ -53,6 +53,11 @@ view the content explored and read by model during this process in the Activity 
 Sources window on the right. After a moment, model will generate a detailed Deep
 Discovery report.
 
+5. Tool execution with Python: Incorporate using tools in your handy ec2 instance and integrating
+it with the LLM framework. Tools like PyQGIS, WhiteboxTools, Microsoft Planetary Computer provides access to STAC APIs
+https://planetarycomputer.microsoft.com/docs/quickstarts/reading-stac/.
+Access to Bhoonidhi ISRO (https://bhoonidhi.nrsc.gov.in/bhoonidhi-api/) APIs
+
 
 To Do:
 1. Deploy GeoGPT-R1-Preview model (open source) on AWS Sagemaker. It's currently on
