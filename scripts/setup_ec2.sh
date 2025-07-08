@@ -1,16 +1,58 @@
 #!/bin/bash
 
 # EC2 Setup Script for GeoGPT-RAG
-# This script sets up the complete environment on EC2 g5.xlarge instance and deploys the system
+# 
+# USAGE:
+#   1. Run this script on a fresh EC2 instance: ./scripts/setup_ec2.sh
+#   2. Then run the cleanup script for full deployment: ./scripts/cleanup_redeploy.sh
+#
+# This script:
+#   - Sets up Docker, NVIDIA toolkit, AWS CLI
+#   - Clones the repository and builds initial images
+#   - Detects and configures the public IP address
+#   - Prepares the environment for the cleanup_redeploy.sh script
+#
+# Compatible with: g5.xlarge, g4dn.xlarge, or similar GPU instances
 
 set -e
 
 REPO_URL="https://github.com/Rekklessss/geogpt-rag.git"
 PROJECT_DIR="$HOME/geogpt-rag"
 
+# Get the public IP of this EC2 instance
+get_public_ip() {
+    # Try multiple methods to get public IP
+    local ip=""
+    
+    # Method 1: EC2 metadata service
+    ip=$(curl -s --max-time 5 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo "")
+    
+    if [[ -n "$ip" && "$ip" != "curl:"* ]]; then
+        echo "$ip"
+        return 0
+    fi
+    
+    # Method 2: External service fallback
+    ip=$(curl -s --max-time 5 https://checkip.amazonaws.com 2>/dev/null | tr -d '\n' || echo "")
+    
+    if [[ -n "$ip" && "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        echo "$ip"
+        return 0
+    fi
+    
+    # Method 3: Manual input
+    echo "Unable to detect public IP automatically"
+    read -p "Please enter your EC2 public IP address: " ip
+    echo "$ip"
+}
+
+# Detect public IP
+PUBLIC_IP=$(get_public_ip)
+
 echo "=== GeoGPT-RAG EC2 Setup & Deployment ==="
 echo "Repository: $REPO_URL"
-echo "Instance: g5.xlarge (3.233.224.145)"
+echo "Public IP: $PUBLIC_IP"
+echo "Instance Type: g5.xlarge (or compatible)"
 echo "Region: us-east-1"
 echo "=========================================="
 
@@ -146,15 +188,18 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl enable geogpt-rag.service
 
-# Build and start services
-echo "🔨 Building and starting services..."
-echo "This may take a while as it downloads models (~7GB)..."
+# Set up IP environment variable for future deployments
+echo "🔧 Setting up IP configuration..."
+export GEOGPT_PUBLIC_IP="$PUBLIC_IP"
+echo "export GEOGPT_PUBLIC_IP=\"$PUBLIC_IP\"" >> ~/.bashrc
 
-# Use sudo for Docker commands since group membership needs a new shell session
-# Build Docker images
+# Build Docker images (initial setup)
+echo "🔨 Building Docker images..."
+echo "This may take a while as it downloads models (~7GB)..."
 sudo docker-compose build
 
-# Start services in detached mode
+# Start services for initial setup verification
+echo "🚀 Starting services for initial verification..."
 sudo docker-compose up -d
 
 echo "⏳ Waiting for services to initialize..."
@@ -190,6 +235,10 @@ EMBEDDING_STATUS=$?
 check_service 8811 "Reranking Service"
 RERANKING_STATUS=$?
 
+# Check GeoGPT API service
+check_service 8812 "GeoGPT API Service"
+GEOGPT_STATUS=$?
+
 # Run system tests
 echo "🧪 Running system tests..."
 if sudo docker exec geogpt-rag-system python /app/scripts/test_system.py; then
@@ -202,45 +251,54 @@ fi
 
 # Create monitoring script
 echo "📊 Creating monitoring script..."
-cat > ~/monitor_geogpt.sh << 'MONITOR_EOF'
+cat > ~/monitor_geogpt.sh << MONITOR_EOF
 #!/bin/bash
 echo "=== GeoGPT-RAG System Status ==="
+echo "🌐 Public IP: $PUBLIC_IP"
+echo ""
 echo "🐳 Docker containers:"
 sudo docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 echo ""
 echo "🎮 GPU status:"
-nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu --format=csv,noheader,nounits
+nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu --format=csv,noheader,nounits 2>/dev/null || echo "No GPU detected"
 echo ""
-echo "🏥 Service health:"
+echo "🏥 Service health (internal):"
 curl -f http://localhost:8810/health 2>/dev/null && echo "✅ Embedding service OK" || echo "❌ Embedding service DOWN"
 curl -f http://localhost:8811/health 2>/dev/null && echo "✅ Reranking service OK" || echo "❌ Reranking service DOWN"
+curl -f http://localhost:8812/health 2>/dev/null && echo "✅ GeoGPT API service OK" || echo "❌ GeoGPT API service DOWN"
+echo ""
+echo "🌐 External service URLs:"
+echo "  - Embedding: http://$PUBLIC_IP:8810/health"
+echo "  - Reranking: http://$PUBLIC_IP:8811/health"
+echo "  - GeoGPT API: http://$PUBLIC_IP:8812/health"
 echo ""
 echo "💾 Disk usage:"
 df -h /
 echo ""
 echo "🔍 Recent logs:"
-echo "Embedding: sudo docker logs --tail 5 geogpt-rag-system 2>/dev/null | grep embedding || echo No embedding logs"
-echo "Reranking: sudo docker logs --tail 5 geogpt-rag-system 2>/dev/null | grep reranking || echo No reranking logs"
+echo "Full logs: sudo docker-compose logs --tail 10"
 echo ""
 echo "📊 System resources:"
-MEMORY_INFO=$(free -h | grep Mem | awk '{print $3 "/" $2}')
-CPU_INFO=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1)
-echo "Memory: $MEMORY_INFO"
-echo "CPU: ${CPU_INFO}% used"
+MEMORY_INFO=\$(free -h | grep Mem | awk '{print \$3 "/" \$2}')
+CPU_INFO=\$(top -bn1 | grep "Cpu(s)" | awk '{print \$2}' | cut -d'%' -f1)
+echo "Memory: \$MEMORY_INFO"
+echo "CPU: \${CPU_INFO}% used"
 MONITOR_EOF
 
 chmod +x ~/monitor_geogpt.sh
 
 # Display final status
 echo ""
-echo "=== Deployment Summary ==="
+echo "=== EC2 Initial Setup Summary ==="
 echo "🏠 Project Directory: $PROJECT_DIR"
+echo "🌐 Detected Public IP: $PUBLIC_IP"
 echo "📊 Monitor System: ~/monitor_geogpt.sh"
-echo "🔄 Redeploy System: cd $PROJECT_DIR && ./scripts/cleanup_redeploy.sh"
+echo "🔄 Full Deployment: cd $PROJECT_DIR && ./scripts/cleanup_redeploy.sh"
 echo ""
 echo "🌐 Service URLs:"
-echo "  - Embedding Service: http://3.233.224.145:8810"
-echo "  - Reranking Service: http://3.233.224.145:8811"
+echo "  - Embedding Service: http://$PUBLIC_IP:8810"
+echo "  - Reranking Service: http://$PUBLIC_IP:8811"
+echo "  - GeoGPT API Service: http://$PUBLIC_IP:8812"
 echo ""
 echo "📋 Service Status:"
 if [ $EMBEDDING_STATUS -eq 0 ]; then
@@ -255,6 +313,12 @@ else
     echo "  ❌ Reranking Service: Failed"
 fi
 
+if [ $GEOGPT_STATUS -eq 0 ]; then
+    echo "  ✅ GeoGPT API Service: Running"
+else
+    echo "  ❌ GeoGPT API Service: Failed"
+fi
+
 if [ $TEST_STATUS -eq 0 ]; then
     echo "  ✅ System Tests: Passed"
 else
@@ -262,20 +326,36 @@ else
 fi
 
 echo ""
-if [ $EMBEDDING_STATUS -eq 0 ] && [ $RERANKING_STATUS -eq 0 ] && [ $TEST_STATUS -eq 0 ]; then
-    echo "🎉 GeoGPT-RAG deployment completed successfully!"
-    echo "💡 The system is ready to use. Check ~/monitor_geogpt.sh for status monitoring."
+if [ $EMBEDDING_STATUS -eq 0 ] && [ $RERANKING_STATUS -eq 0 ] && [ $GEOGPT_STATUS -eq 0 ] && [ $TEST_STATUS -eq 0 ]; then
+    echo "🎉 Initial EC2 setup completed successfully!"
+    echo "💡 Basic services are running. For full deployment, run the cleanup script next."
 else
-    echo "⚠️ Deployment completed with some issues. Check logs for details:"
+    echo "⚠️ Initial setup completed with some issues. Check logs for details:"
     echo "   docker-compose logs -f"
 fi
 
 echo ""
-echo "🔄 To redeploy after code changes:"
+echo "============================================="
+echo "🚀 NEXT STEPS FOR COMPLETE DEPLOYMENT:"
+echo "============================================="
+echo ""
+echo "1. 🧹 Run the cleanup script for full deployment:"
 echo "   cd $PROJECT_DIR && ./scripts/cleanup_redeploy.sh"
 echo ""
-echo "💡 Note: Docker group membership is active. For regular docker commands without sudo:"
-echo "   - Either use: sudo docker <command>"
-echo "   - Or log out and back in to refresh group membership"
+echo "   The IP address ($PUBLIC_IP) is already configured!"
 echo ""
-echo "📚 For detailed usage examples, see: DEPLOYMENT_README.md" 
+echo "2. 📊 Monitor system status:"
+echo "   ~/monitor_geogpt.sh"
+echo ""
+echo "3. 🔄 For future redeployments when IP changes:"
+echo "   ./scripts/cleanup_redeploy.sh --ip NEW_IP_ADDRESS"
+echo ""
+echo "4. 🔍 View logs:"
+echo "   sudo docker-compose logs -f"
+echo ""
+echo "💡 Notes:"
+echo "   - IP address $PUBLIC_IP is set in environment"
+echo "   - Docker group membership active (logout/login for non-sudo access)"
+echo "   - All services configured for this IP automatically"
+echo ""
+echo "📚 For detailed usage examples, see: DEPLOYMENT_README.md and IP_MANAGEMENT_GUIDE.md" 
