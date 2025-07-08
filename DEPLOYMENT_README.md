@@ -9,7 +9,7 @@ This guide provides streamlined deployment of the GeoGPT-RAG system on AWS EC2 g
 - **AWS EC2 g5.xlarge instance** (already configured)
 - **Instance Details**:
   - Instance ID: `i-01089964a2f322781`
-  - Public IP: `3.234.222.18`
+  - Public IP: `3.83.188.84`
   - Private IP: `172.31.76.142`
   - IAM Role: `GeoGPT-Custom-Role-EC2`
 - **External Services**: AWS Sagemaker and Zilliz Cloud configured
@@ -48,7 +48,7 @@ This script handles:
 
 ### 1. SSH Access
 ```bash
-ssh -i geogpt-ec2.pem ubuntu@3.234.222.18
+ssh -i geogpt-ec2.pem ubuntu@3.83.188.84
 ```
 
 ### 2. Initial Setup (Run Once)

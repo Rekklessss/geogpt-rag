@@ -6,26 +6,33 @@ const nextConfig = {
   
   // API proxy configuration for RAG pipeline
   async rewrites() {
+    // Get API host from environment variable, fallback to hardcoded IP
+    const apiHost = process.env.NEXT_PUBLIC_API_HOST || '3.83.188.84'
+    const apiProtocol = process.env.NEXT_PUBLIC_API_PROTOCOL || 'https'
+    const embeddingPort = process.env.NEXT_PUBLIC_EMBEDDING_PORT || '8810'
+    const rerankingPort = process.env.NEXT_PUBLIC_RERANKING_PORT || '8811' 
+    const geogptPort = process.env.NEXT_PUBLIC_GEOGPT_PORT || '8812'
+    
     return {
       beforeFiles: [
         // Proxy RAG API requests to avoid CORS in development
         {
           source: '/api/embedding/:path*',
           destination: process.env.NODE_ENV === 'production' 
-            ? 'https://3.234.222.18:8810/:path*'
-            : 'http://localhost:8810/:path*'
+            ? `${apiProtocol}://${apiHost}:${embeddingPort}/:path*`
+            : `http://localhost:${embeddingPort}/:path*`
         },
         {
           source: '/api/reranking/:path*',
           destination: process.env.NODE_ENV === 'production'
-            ? 'https://3.234.222.18:8811/:path*' 
-            : 'http://localhost:8811/:path*'
+            ? `${apiProtocol}://${apiHost}:${rerankingPort}/:path*` 
+            : `http://localhost:${rerankingPort}/:path*`
         },
         {
           source: '/api/geogpt/:path*',
           destination: process.env.NODE_ENV === 'production'
-            ? 'https://3.234.222.18:8812/:path*'
-            : 'http://localhost:8812/:path*'
+            ? `${apiProtocol}://${apiHost}:${geogptPort}/:path*`
+            : `http://localhost:${geogptPort}/:path*`
         }
       ]
     }
@@ -34,11 +41,11 @@ const nextConfig = {
   // Environment variables for API endpoints
   env: {
     NEXT_PUBLIC_API_BASE_URL: process.env.NODE_ENV === 'production' 
-      ? 'https://3.234.222.18'
+      ? `${process.env.NEXT_PUBLIC_API_PROTOCOL || 'https'}://${process.env.NEXT_PUBLIC_API_HOST || '3.83.188.84'}`
       : 'http://localhost',
-    NEXT_PUBLIC_EMBEDDING_PORT: '8810',
-    NEXT_PUBLIC_RERANKING_PORT: '8811',
-    NEXT_PUBLIC_GEOGPT_PORT: '8812'
+    NEXT_PUBLIC_EMBEDDING_PORT: process.env.NEXT_PUBLIC_EMBEDDING_PORT || '8810',
+    NEXT_PUBLIC_RERANKING_PORT: process.env.NEXT_PUBLIC_RERANKING_PORT || '8811',
+    NEXT_PUBLIC_GEOGPT_PORT: process.env.NEXT_PUBLIC_GEOGPT_PORT || '8812'
   },
   
   // Build optimization
@@ -47,7 +54,10 @@ const nextConfig = {
   
   // Image optimization (if needed for maps/charts)
   images: {
-    domains: ['localhost', '3.234.222.18'],
+    domains: [
+      'localhost', 
+      process.env.NEXT_PUBLIC_API_HOST || '3.83.188.84'
+    ],
     formats: ['image/webp', 'image/avif']
   },
   

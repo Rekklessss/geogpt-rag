@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
 import { statusService, handleApiError } from '@/lib/api'
+import { getServiceEndpoint } from '@/lib/config'
 
 interface StatusMonitorProps {
   isVisible: boolean
@@ -52,7 +53,7 @@ const mockServices: ServiceStatus[] = [
     responseTime: 124,
     uptime: 99.8,
     lastChecked: new Date(),
-    endpoint: '3.234.222.18:8810',
+    endpoint: getServiceEndpoint('embedding'),
     icon: <Database className="h-4 w-4" />,
     description: 'Text embedding service for geospatial documents',
     metrics: {
@@ -68,7 +69,7 @@ const mockServices: ServiceStatus[] = [
     responseTime: 89,
     uptime: 99.9,
     lastChecked: new Date(),
-    endpoint: '3.234.222.18:8811',
+    endpoint: getServiceEndpoint('reranking'),
     icon: <Activity className="h-4 w-4" />,
     description: 'Document reranking service for relevance scoring',
     metrics: {
@@ -116,7 +117,7 @@ const mockServices: ServiceStatus[] = [
     responseTime: 0,
     uptime: 95.2,
     lastChecked: new Date(),
-    endpoint: 'localhost:8812',
+    endpoint: getServiceEndpoint('geogpt'),
     icon: <Zap className="h-4 w-4" />,
     description: 'Python code execution environment',
     metrics: {
@@ -159,7 +160,7 @@ export function StatusMonitor({ isVisible, onToggle, className }: StatusMonitorP
             responseTime: systemStatus.services.geoEmbeddingApi?.responseTime || 0,
             uptime: systemStatus.services.geoEmbeddingApi?.uptime || 0,
             lastChecked: new Date(systemStatus.services.geoEmbeddingApi?.lastCheck || Date.now()),
-            endpoint: '3.234.222.18:8810',
+            endpoint: getServiceEndpoint('embedding'),
             icon: <Database className="h-4 w-4" />,
             description: 'Text embedding service for geospatial documents',
             metrics: {
@@ -175,7 +176,7 @@ export function StatusMonitor({ isVisible, onToggle, className }: StatusMonitorP
             responseTime: systemStatus.services.geoRerankerApi?.responseTime || 0,
             uptime: systemStatus.services.geoRerankerApi?.uptime || 0,
             lastChecked: new Date(systemStatus.services.geoRerankerApi?.lastCheck || Date.now()),
-            endpoint: '3.234.222.18:8811',
+            endpoint: getServiceEndpoint('reranking'),
             icon: <Activity className="h-4 w-4" />,
             description: 'Document reranking service for relevance scoring',
             metrics: {
@@ -203,7 +204,7 @@ export function StatusMonitor({ isVisible, onToggle, className }: StatusMonitorP
           {
             id: 'vector-db',
             name: 'Vector Database',
-            status: systemStatus.services.vectorDb?.status || 'offline',
+            status: normalizeStatus(systemStatus.services.vectorDb?.status || 'offline'),
             responseTime: systemStatus.services.vectorDb?.responseTime || 0,
             uptime: systemStatus.services.vectorDb?.uptime || 0,
             lastChecked: new Date(systemStatus.services.vectorDb?.lastCheck || Date.now()),
@@ -219,11 +220,11 @@ export function StatusMonitor({ isVisible, onToggle, className }: StatusMonitorP
           {
             id: 'code-execution',
             name: 'Code Execution',
-            status: systemStatus.services.codeExecution?.status || 'offline',
+            status: normalizeStatus(systemStatus.services.codeExecution?.status || 'offline'),
             responseTime: systemStatus.services.codeExecution?.responseTime || 0,
             uptime: systemStatus.services.codeExecution?.uptime || 0,
             lastChecked: new Date(systemStatus.services.codeExecution?.lastCheck || Date.now()),
-            endpoint: '3.234.222.18:8812',
+            endpoint: getServiceEndpoint('geogpt'),
             icon: <Zap className="h-4 w-4" />,
             description: 'Python code execution environment',
             metrics: {

@@ -8,6 +8,44 @@ set -e
 PROJECT_DIR="$HOME/geogpt-rag"
 REPO_URL="https://github.com/Rekklessss/geogpt-rag.git"
 
+# Configuration - Update this IP address when your EC2 instance restarts
+# You can also set this via environment variable: export GEOGPT_PUBLIC_IP="your.new.ip"
+GEOGPT_PUBLIC_IP="${GEOGPT_PUBLIC_IP:-3.83.188.84}"
+
+# API service ports (usually don't change)
+EMBEDDING_PORT="8810"
+RERANKING_PORT="8811" 
+GEOGPT_PORT="8812"
+
+# Function to get and validate IP address
+get_ip_address() {
+    if [[ "$1" == "--ip" ]] && [[ -n "$2" ]]; then
+        # IP provided via command line argument
+        GEOGPT_PUBLIC_IP="$2"
+        echo "Using provided IP address: $GEOGPT_PUBLIC_IP"
+    elif [[ -z "$GEOGPT_PUBLIC_IP" ]] || [[ "$GEOGPT_PUBLIC_IP" == "3.83.188.84" ]]; then
+        # No IP set or using default, prompt user
+        echo "⚠️  Current IP address: $GEOGPT_PUBLIC_IP"
+        echo "💡 If your EC2 instance has a new IP, you can:"
+        echo "   1. Set environment variable: export GEOGPT_PUBLIC_IP='your.new.ip'"
+        echo "   2. Pass as argument: ./cleanup_redeploy.sh --ip your.new.ip"
+        echo "   3. Press Enter to continue with current IP"
+        echo ""
+        read -p "Enter new IP address (or press Enter to use $GEOGPT_PUBLIC_IP): " NEW_IP
+        if [[ -n "$NEW_IP" ]]; then
+            GEOGPT_PUBLIC_IP="$NEW_IP"
+            echo "Updated IP address to: $GEOGPT_PUBLIC_IP"
+        fi
+    fi
+}
+
+# Check for IP argument
+if [[ "$1" == "--ip" ]]; then
+    get_ip_address "$1" "$2"
+else
+    get_ip_address
+fi
+
 echo "🧹 GeoGPT-RAG Complete Cleanup & Redeploy"
 echo "========================================"
 echo "⚠️  This will completely remove:"
@@ -204,9 +242,9 @@ echo "🏠 Project Directory: $PROJECT_DIR"
 echo "🔄 Redeploy Again: cd $PROJECT_DIR && ./scripts/cleanup_redeploy.sh"
 echo ""
 echo "🌐 Service URLs:"
-echo "  - Embedding Service: http://3.234.222.18:8810"
-echo "  - Reranking Service: http://3.234.222.18:8811"
-echo "  - GeoGPT API Service: http://3.234.222.18:8812"
+echo "  - Embedding Service: http://${GEOGPT_PUBLIC_IP}:${EMBEDDING_PORT}"
+echo "  - Reranking Service: http://${GEOGPT_PUBLIC_IP}:${RERANKING_PORT}"
+echo "  - GeoGPT API Service: http://${GEOGPT_PUBLIC_IP}:${GEOGPT_PORT}"
 echo ""
 echo "📋 Service Status:"
 if [ $EMBEDDING_STATUS -eq 0 ]; then
@@ -255,6 +293,10 @@ echo "   sudo docker-compose logs -f"
 echo ""
 echo "📊 To monitor system status:"
 echo "   sudo docker ps && curl -s http://localhost:8812/health"
+echo ""
+echo "🔄 To redeploy with a different IP address:"
+echo "   ./scripts/cleanup_redeploy.sh --ip YOUR_NEW_IP"
+echo "   OR: export GEOGPT_PUBLIC_IP='YOUR_NEW_IP' && ./scripts/cleanup_redeploy.sh"
 echo ""
 echo "🐳 Docker containers:"
 sudo docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 

@@ -108,8 +108,7 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir \
     python-multipart>=0.0.6 \
     wikipedia==1.4.0 \
     duckduckgo-search==8.1.1 \
-    beautifulsoup4==4.12.3 \
-    docker>=7.0.0
+    beautifulsoup4==4.12.3
 
 # Copy source code
 COPY . /app/
