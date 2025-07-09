@@ -507,7 +507,7 @@ graph TB
     end
     
     subgraph "Container Details"
-        DETAILS[Single Container (geogpt-rag-system)<br/>- Ubuntu 24.04 base<br/>- Python 3.8<br/>- PyTorch 2.0 + Transformers<br/>- FastAPI + QGIS + WhiteboxTools<br/>- All services in one container<br/>- 64GB RAM recommended]
+        DETAILS["Single Container: geogpt-rag-system<br/>- Ubuntu 24.04 base<br/>- Python 3.12<br/>- PyTorch 2.0 + Transformers<br/>- FastAPI + QGIS + WhiteboxTools<br/>- All services in one container<br/>- 32GB RAM recommended"]
     end
 ```
 
@@ -529,6 +529,161 @@ graph LR
     LIVE --> BACKUP[Backup<br/>- Data Backup<br/>- Config Backup<br/>- Model Checkpoint]
 ```
 
+## 8. Detailed Process Flow Diagram
+
+### Complete GeoGPT-RAG System Process Flow
+```mermaid
+graph TB
+    subgraph "User Interaction Layer"
+        USER[User Input] --> UI_CHECK{Frontend Available?}
+        UI_CHECK -->|Yes| FRONTEND[Next.js Frontend<br/>Port 3000]
+        UI_CHECK -->|No| DIRECT[Direct API Access<br/>Port 8812]
+        FRONTEND --> API_GATEWAY[API Gateway<br/>Main API Service]
+        DIRECT --> API_GATEWAY
+    end
+    
+    subgraph "Single Container: geogpt-rag-system"
+        API_GATEWAY --> INPUT_PROC[Input Processing<br/>- Validation<br/>- Rate Limiting<br/>- CORS Handling]
+        
+        INPUT_PROC --> ROUTE_DECISION{Request Type?}
+        
+        ROUTE_DECISION -->|Chat| CHAT_FLOW[Chat Processing Flow]
+        ROUTE_DECISION -->|Discovery| DISCOVERY_FLOW[Deep Discovery Flow]
+        ROUTE_DECISION -->|Code| CODE_FLOW[Code Execution Flow]
+        ROUTE_DECISION -->|File| FILE_FLOW[File Management Flow]
+        ROUTE_DECISION -->|Health| HEALTH_FLOW[Health Check Flow]
+        
+        subgraph "Chat Processing Pipeline"
+            CHAT_FLOW --> CONTEXT_BUILD[Context Building<br/>- Selected Files<br/>- Settings<br/>- Web Search Flag]
+            
+            CONTEXT_BUILD --> EMB_SERVICE[Embedding Service<br/>Port 8810<br/>GeoEmbedding 7B]
+            EMB_SERVICE --> VECTOR_SEARCH[Vector Search<br/>Zilliz Cloud<br/>Top-128 Results]
+            
+            VECTOR_SEARCH --> RERANK_SERVICE[Reranking Service<br/>Port 8811<br/>GeoReranker 568M]
+            RERANK_SERVICE --> TOP_RESULTS[Top 3-5 Results<br/>Score > 1.5]
+            
+            TOP_RESULTS --> WEB_DECISION{Web Search<br/>Enabled?}
+            WEB_DECISION -->|Yes| WEB_SEARCH[Web Search<br/>DuckDuckGo + Wikipedia]
+            WEB_DECISION -->|No| CONTEXT_MERGE
+            WEB_SEARCH --> CONTEXT_MERGE[Context Merging<br/>RAG + Web + Files]
+            
+            CONTEXT_MERGE --> LLM_CALL[LLM Generation<br/>AWS Sagemaker<br/>GeoGPT-R1]
+            LLM_CALL --> RESPONSE_FORMAT[Response Formatting<br/>- Main Answer<br/>- Chain-of-Thought<br/>- Source Citations]
+        end
+        
+        subgraph "Deep Discovery Pipeline"
+            DISCOVERY_FLOW --> PLAN_RESEARCH[Research Planning<br/>- Multi-step Strategy<br/>- Source Identification]
+            PLAN_RESEARCH --> DISCOVERY_LOOP[Discovery Loop<br/>Steps 1-5]
+            
+            DISCOVERY_LOOP --> STEP_SEARCH[Step Search<br/>- Knowledge Base<br/>- Web Search<br/>- Wikipedia]
+            STEP_SEARCH --> STEP_ANALYSIS[Step Analysis<br/>- Information Synthesis<br/>- Progress Update]
+            STEP_ANALYSIS --> MORE_STEPS{More Steps<br/>Needed?}
+            MORE_STEPS -->|Yes| DISCOVERY_LOOP
+            MORE_STEPS -->|No| FINAL_REPORT[Final Report<br/>Generation]
+        end
+        
+        subgraph "Code Execution Pipeline"
+            CODE_FLOW --> CODE_VALIDATE[Code Validation<br/>- Syntax Check<br/>- Security Scan<br/>- Import Validation]
+            CODE_VALIDATE --> SANDBOX_CREATE[Sandbox Creation<br/>- Temp Directory<br/>- Resource Limits<br/>- Security Isolation]
+            
+            SANDBOX_CREATE --> GIS_INJECT[GIS Tools Injection<br/>- PyQGIS Setup<br/>- WhiteboxTools<br/>- Data API Access]
+            GIS_INJECT --> CODE_EXECUTE[Code Execution<br/>- Monitored Process<br/>- Resource Tracking<br/>- Output Capture]
+            
+            CODE_EXECUTE --> GIS_TOOLS{GIS Tools<br/>Used?}
+            GIS_TOOLS -->|PyQGIS| QGIS_PROCESSING[PyQGIS Processing<br/>- Vector Operations<br/>- Raster Analysis<br/>- 3D Analysis]
+            GIS_TOOLS -->|WhiteboxTools| WBT_PROCESSING[WhiteboxTools<br/>- Terrain Analysis<br/>- Hydrology<br/>- LiDAR Processing]
+            GIS_TOOLS -->|Data APIs| DATA_ACCESS[Data Access<br/>- Planetary Computer<br/>- Bhoonidhi ISRO<br/>- Satellite Data]
+            
+            QGIS_PROCESSING --> RESULT_COLLECT[Result Collection]
+            WBT_PROCESSING --> RESULT_COLLECT
+            DATA_ACCESS --> RESULT_COLLECT
+            RESULT_COLLECT --> CLEANUP[Cleanup & Format<br/>- Remove Temp Files<br/>- Generate Outputs<br/>- Error Handling]
+        end
+        
+        subgraph "File Management Pipeline"
+            FILE_FLOW --> FILE_TYPE{Operation<br/>Type?}
+            FILE_TYPE -->|Upload| FILE_UPLOAD[File Upload<br/>- Multi-file Support<br/>- Size Validation<br/>- Type Checking]
+            FILE_TYPE -->|Search| FILE_SEARCH[File Search<br/>- Content Search<br/>- Metadata Filtering]
+            FILE_TYPE -->|Delete| FILE_DELETE[File Deletion<br/>- Vector DB Cleanup<br/>- File Removal]
+            
+            FILE_UPLOAD --> CONTENT_EXTRACT[Content Extraction<br/>- PDF Processing<br/>- DOC/XLSX Parsing<br/>- Text Extraction]
+            CONTENT_EXTRACT --> TEXT_CHUNK[Text Chunking<br/>- Sentence Splitting<br/>- Overlap Strategy<br/>- Size Optimization]
+            TEXT_CHUNK --> BATCH_EMBED[Batch Embedding<br/>- GeoEmbedding Model<br/>- Vector Generation]
+            BATCH_EMBED --> VECTOR_STORE[Vector Storage<br/>- Zilliz Upload<br/>- Metadata Linking<br/>- Index Update]
+        end
+        
+        subgraph "Health Check Pipeline"
+            HEALTH_FLOW --> SERVICE_CHECK[Service Status Check<br/>- Embedding Service<br/>- Reranking Service<br/>- Vector DB Connection<br/>- LLM Endpoint]
+            SERVICE_CHECK --> RESOURCE_CHECK[Resource Monitoring<br/>- Memory Usage<br/>- GPU Utilization<br/>- Disk Space]
+            RESOURCE_CHECK --> HEALTH_REPORT[Health Report<br/>Generation]
+        end
+    end
+    
+    subgraph "External Services"
+        VECTOR_SEARCH -.-> ZILLIZ[(Zilliz Cloud<br/>Vector Database<br/>us-west-1)]
+        LLM_CALL -.-> SAGEMAKER[AWS Sagemaker<br/>GeoGPT-R1 Model<br/>us-east-1]
+        WEB_SEARCH -.-> DUCKDUCKGO[DuckDuckGo<br/>Search API]
+        WEB_SEARCH -.-> WIKIPEDIA[Wikipedia<br/>API]
+        DATA_ACCESS -.-> PLANETARY[Microsoft<br/>Planetary Computer]
+        DATA_ACCESS -.-> BHOONIDHI[ISRO<br/>Bhoonidhi Portal]
+        VECTOR_STORE -.-> ZILLIZ
+    end
+    
+    subgraph "Response & Output Layer"
+        RESPONSE_FORMAT --> RESPONSE_OUT[Response Output<br/>- JSON Format<br/>- Streaming Support<br/>- Error Handling]
+        FINAL_REPORT --> RESPONSE_OUT
+        CLEANUP --> RESPONSE_OUT
+        VECTOR_STORE --> RESPONSE_OUT
+        HEALTH_REPORT --> RESPONSE_OUT
+        
+        RESPONSE_OUT --> OUTPUT_TYPE{Output<br/>Destination?}
+        OUTPUT_TYPE -->|Frontend| FRONTEND_UPDATE[Frontend Update<br/>- Real-time Display<br/>- Source Linking<br/>- Progress Updates]
+        OUTPUT_TYPE -->|Direct API| JSON_RESPONSE[JSON Response<br/>- Structured Data<br/>- HTTP Status<br/>- Headers]
+        
+        FRONTEND_UPDATE --> USER_DISPLAY[User Interface<br/>Display]
+        JSON_RESPONSE --> USER_DISPLAY
+    end
+    
+    subgraph "Error Handling & Logging"
+        INPUT_PROC -.-> ERROR_HANDLER[Error Handler<br/>- Input Validation<br/>- Rate Limiting<br/>- Authentication]
+        CODE_EXECUTE -.-> TIMEOUT_HANDLER[Timeout Handler<br/>- Resource Limits<br/>- Process Kill<br/>- Cleanup]
+        LLM_CALL -.-> RETRY_HANDLER[Retry Handler<br/>- Connection Issues<br/>- Rate Limits<br/>- Failover]
+        
+        ERROR_HANDLER --> LOG_SYSTEM[Logging System<br/>- Request Logs<br/>- Error Logs<br/>- Performance Metrics]
+        TIMEOUT_HANDLER --> LOG_SYSTEM
+        RETRY_HANDLER --> LOG_SYSTEM
+        
+        LOG_SYSTEM --> LOG_FILES[Log Files<br/>/app/logs/<br/>- embedding.log<br/>- reranking.log<br/>- geogpt_api.log]
+    end
+```
+
+### Model Lifecycle Flow
+```mermaid
+graph TB
+    START[Container Startup] --> MODEL_CHECK{Models<br/>Downloaded?}
+    
+    MODEL_CHECK -->|No| DOWNLOAD_START[Download Process<br/>~7GB Total]
+    MODEL_CHECK -->|Yes| SERVICE_START[Start Services]
+    
+    DOWNLOAD_START --> GIT_LFS[Git LFS Setup<br/>Large File Support]
+    GIT_LFS --> EMB_DOWNLOAD[Download GeoEmbedding<br/>~4GB<br/>HuggingFace Repository]
+    EMB_DOWNLOAD --> RERANK_DOWNLOAD[Download GeoReranker<br/>~3GB<br/>HuggingFace Repository]
+    
+    RERANK_DOWNLOAD --> MODEL_VERIFY[Model Verification<br/>- Config Files<br/>- Weight Files<br/>- Tokenizer Files]
+    MODEL_VERIFY --> MODEL_READY{Models<br/>Ready?}
+    
+    MODEL_READY -->|No| RETRY_DOWNLOAD[Retry Download<br/>Alternative Method]
+    MODEL_READY -->|Yes| SERVICE_START
+    RETRY_DOWNLOAD --> MODEL_VERIFY
+    
+    SERVICE_START --> EMB_START[Start Embedding Service<br/>embedding_api.py<br/>Port 8810]
+    EMB_START --> RERANK_START[Start Reranking Service<br/>reranker_fast_api.py<br/>Port 8811]
+    RERANK_START --> API_START[Start Main API<br/>geogpt_api.py<br/>Port 8812]
+    
+    API_START --> HEALTH_WAIT[Wait for Health Checks<br/>60 second timeout]
+    HEALTH_WAIT --> READY[System Ready<br/>All Services Online]
+```
+
 ## Summary
 
 These diagrams provide a comprehensive visual representation of the GeoGPT-RAG system architecture, workflows, and deployment. They cover:
@@ -540,5 +695,6 @@ These diagrams provide a comprehensive visual representation of the GeoGPT-RAG s
 5. **Data Flows**: How data moves through the system
 6. **Use Cases**: System capabilities and user interactions
 7. **Deployment**: Container architecture and deployment process
+8. **Process Flow**: Complete end-to-end system operation and model lifecycle
 
 Each diagram is designed to be accurate, complete, and provide clear understanding of different aspects of the system. They can be rendered using Mermaid in any Markdown viewer that supports it, or exported as images for documentation purposes. 
