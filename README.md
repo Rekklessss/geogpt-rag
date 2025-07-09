@@ -3,7 +3,7 @@
 [![Models](https://img.shields.io/badge/🤗%20Models-GeoGPT--Research-blue)](https://huggingface.co/GeoGPT-Research-Project)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue)](docker-compose.yml)
-[![Status](https://img.shields.io/badge/Status-Production-green)](http://3.234.222.18:8812/health)
+[![Status](https://img.shields.io/badge/Status-Production-green)](http://3.81.101.190:8812/health)
 
 ## 🌍 Overview
 
@@ -45,26 +45,25 @@ GeoGPT-RAG is a revolutionary Chain-of-Thought LLM system that transforms comple
 ```mermaid
 graph TB
     subgraph "User Interface"
-        U[User] --> UI[React Frontend]
-        UI --> API[GeoGPT API]
+        U[User] --> UI[React Frontend<br/>Next.js App<br/>Port 3000]
+        UI --> API[GeoGPT API<br/>Port 8812]
     end
     
-    subgraph "AI Services"
+    subgraph "Single Container (geogpt-rag-system)"
         API --> EMB[Embedding Service<br/>Port 8810]
         API --> RNK[Reranking Service<br/>Port 8811]
-        API --> LLM[GeoGPT-R1<br/>Sagemaker]
+        API --> LLM[GeoGPT-R1<br/>AWS Sagemaker]
+        
+        API --> TOOLS[GIS Tools]
+        TOOLS --> QGIS[PyQGIS<br/>300+ algorithms]
+        TOOLS --> WBT[WhiteboxTools<br/>518+ tools]
+        TOOLS --> PC[Planetary Computer<br/>Satellite Data]
+        TOOLS --> ISRO[Bhoonidhi ISRO<br/>Indian EO Data]
     end
     
-    subgraph "GIS Tools"
-        API --> QGIS[PyQGIS]
-        API --> WBT[WhiteboxTools]
-        API --> PC[Planetary Computer]
-        API --> ISRO[Bhoonidhi ISRO]
-    end
-    
-    subgraph "Data Layer"
-        EMB --> VDB[(Vector DB)]
-        API --> WEB[Web Search]
+    subgraph "External Services"
+        EMB --> VDB[(Zilliz Vector DB)]
+        API --> WEB[Web Search APIs]
     end
 ```
 
@@ -72,11 +71,15 @@ graph TB
 
 ## 🚀 Quick Start
 
+### Current Architecture
+**Single Container Deployment**: All AI services (embedding, reranking, main API) run in one Docker container for simplified deployment. The frontend is a separate Next.js application that can be deployed independently.
+
 ### Prerequisites
 - Docker and Docker Compose
 - NVIDIA GPU with drivers (for optimal performance)
 - 32GB+ RAM recommended
 - Ubuntu 20.04+ or similar Linux distribution
+- Git LFS (models auto-download on first run)
 
 ### One-Command Deployment
 
@@ -85,7 +88,7 @@ graph TB
 git clone https://github.com/your-org/geogpt-rag.git
 cd geogpt-rag
 
-# Deploy everything
+# Deploy everything (downloads ~7GB models on first run)
 ./scripts/cleanup_redeploy.sh
 
 # Verify deployment
@@ -105,12 +108,32 @@ curl -X POST http://localhost:8812/chat \
   }'
 ```
 
-### Access the Web Interface
+### Setup Frontend (Optional)
+
+The frontend is a separate Next.js application:
+
+```bash
+# Navigate to frontend directory
+cd frontend
+
+# Install dependencies
+npm install
+
+# Configure API endpoints
+cp .env.example .env.local
+# Edit .env.local with your server IP
+
+# Start frontend
+npm run dev
+```
+
+### Access the Interfaces
 
 Open your browser and navigate to:
-- Frontend: `http://localhost:3000`
-- API Docs: `http://localhost:8812/docs`
-- Health Monitor: `http://localhost:8812/health`
+- **Frontend**: `http://localhost:3000` (after frontend setup)
+- **API Docs**: `http://localhost:8812/docs`
+- **Health Monitor**: `http://localhost:8812/health`
+- **Production API**: `http://3.81.101.190:8812`
 
 ## 📖 Documentation
 
@@ -195,9 +218,9 @@ GeoGPT: [Processing historical satellite data...]
 - **Bhoonidhi ISRO**: Indian Remote Sensing data
 
 ### Infrastructure
-- **Backend**: FastAPI, Python 3.8+
-- **Frontend**: Next.js 14, React, TypeScript
-- **Deployment**: Docker, AWS EC2 g5.xlarge
+- **Backend**: FastAPI, Python 3.8+, Single Container Architecture
+- **Frontend**: Next.js 14, React, TypeScript (Separate deployment)
+- **Deployment**: Docker single container, AWS EC2 g5.xlarge
 - **Monitoring**: Real-time health checks, comprehensive logging
 
 ## 📊 Performance Metrics
@@ -230,8 +253,8 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) for deta
 
 ## 🔗 Quick Links
 
-- **Live Demo**: [http://3.234.222.18:8812](http://3.234.222.18:8812)
-- **API Docs**: [http://3.234.222.18:8812/docs](http://3.234.222.18:8812/docs)
+- **Live Demo**: [http://3.81.101.190:8812](http://3.81.101.190:8812)
+- **API Docs**: [http://3.81.101.190:8812/docs](http://3.81.101.190:8812/docs)
 - **Models**: [Hugging Face Collection](https://huggingface.co/GeoGPT-Research-Project)
 - **Issues**: [GitHub Issues](https://github.com/your-org/geogpt-rag/issues)
 

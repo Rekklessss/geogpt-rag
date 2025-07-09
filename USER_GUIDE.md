@@ -43,14 +43,38 @@ GeoGPT-RAG is an advanced AI system that makes complex geospatial analysis acces
 
 ### Accessing GeoGPT
 
-1. **Web Interface**: Open your browser and navigate to the GeoGPT URL
-   - Production: `http://3.234.222.18:3000`
-   - Local: `http://localhost:3000`
+1. **API Interface**: The main GeoGPT system runs as a single container
+   - Production API: `http://3.81.101.190:8812`
+   - Local API: `http://localhost:8812`
+   - API Documentation: `http://localhost:8812/docs`
 
-2. **First Time Setup**:
+2. **Web Interface** (Optional): Separate frontend application
+   - Setup required: See [Frontend Setup](#frontend-setup)
+   - Development: `http://localhost:3000`
+
+3. **First Time Setup**:
    - No login required for demo version
-   - Interface loads with example queries
-   - All features available immediately
+   - All services start automatically in one container
+   - Models download automatically (~7GB)
+
+### Frontend Setup
+
+If you want to use the web interface:
+
+```bash
+# Navigate to frontend directory
+cd frontend
+
+# Install dependencies
+npm install
+
+# Configure API endpoints
+cp .env.example .env.local
+# Edit .env.local with your server IP (default: 3.81.101.190)
+
+# Start development server
+npm run dev
+```
 
 ### Your First Query
 

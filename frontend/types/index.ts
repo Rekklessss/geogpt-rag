@@ -54,6 +54,8 @@ export interface DocumentSource {
   pageNumber?: number
   relevanceScore: number
   excerpt: string
+  type?: 'knowledge_base' | 'web_search' | 'wikipedia' | 'analysis' | 'report'
+  url?: string
 }
 
 export interface ChatSession {

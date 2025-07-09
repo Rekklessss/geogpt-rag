@@ -13,7 +13,13 @@ import {
   ChevronUp,
   Copy,
   Check,
-  Search
+  Search,
+  Globe,
+  Database,
+  ExternalLink,
+  Clock,
+  Zap,
+  User
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,105 +29,17 @@ import { DeepDiscovery } from './deep-discovery'
 import { EnhancedChatInput } from './enhanced-chat-input'
 import { CodeExecution } from './code-execution'
 import { chatService, handleApiError } from '@/lib/api'
+import { mockChatMessages, generateMockChatResponse } from '@/lib/mock-data'
 
 interface ChatInterfaceProps {
   selectedFiles: string[]
   onFileDeselect: (fileId: string) => void
+  onFileAttach?: () => void
   className?: string
 }
 
-// Mock chat data with fixed timestamps to prevent hydration errors
-const mockMessages: ChatMessage[] = [
-  {
-    id: '1',
-    role: 'assistant',
-    content: 'Hello! I\'m GeoGPT, your AI assistant for geospatial analysis. I can help you analyze documents, generate code, and solve complex spatial problems. How can I assist you today?',
-    timestamp: new Date('2024-01-15T10:00:00Z'),
-    type: 'text'
-  },
-  {
-    id: '2',
-    role: 'user',
-    content: 'Can you analyze the urban development patterns in the uploaded city planning document?',
-    timestamp: new Date('2024-01-15T10:05:00Z'),
-    type: 'text'
-  },
-  {
-    id: '3',
-    role: 'assistant',
-    content: 'I\'ll analyze the urban development patterns in your city planning document. Let me examine the data systematically.',
-    timestamp: new Date('2024-01-15T10:07:00Z'),
-    type: 'thinking',
-    metadata: {
-      thinking: 'First, I need to examine the document structure and identify key urban development indicators. I\'ll look for population density data, zoning information, and infrastructure development timelines. Then I\'ll analyze spatial patterns and correlations.',
-      sources: [
-        {
-          filename: 'City_Planning_Data.xlsx',
-          relevanceScore: 0.95,
-          excerpt: 'Population density increased by 23% in downtown area from 2020-2023...'
-        }
-      ]
-    }
-  },
-  {
-    id: '4',
-    role: 'assistant',
-    content: 'Here\'s the Python code to analyze urban development patterns:',
-    timestamp: new Date('2024-01-15T10:09:00Z'),
-    type: 'code',
-    metadata: {
-      code: `import geopandas as gpd
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-from shapely.geometry import Point
-
-# Load urban development data
-development_data = pd.read_excel('City_Planning_Data.xlsx')
-print(f"Loaded {len(development_data)} development records")
-
-# Create spatial analysis
-def analyze_development_patterns(data):
-    # Calculate development density by district
-    density_by_district = data.groupby('district').agg({
-        'population': 'sum',
-        'area_sqkm': 'sum',
-        'new_buildings': 'count'
-    }).reset_index()
-    
-    density_by_district['pop_density'] = (
-        density_by_district['population'] / 
-        density_by_district['area_sqkm']
-    )
-    
-    return density_by_district
-
-# Perform analysis
-results = analyze_development_patterns(development_data)
-print("\\nDevelopment Analysis Results:")
-print(results.head())
-
-# Create visualization
-plt.figure(figsize=(12, 8))
-plt.subplot(2, 2, 1)
-sns.barplot(data=results, x='district', y='pop_density')
-plt.title('Population Density by District')
-plt.xticks(rotation=45)
-
-plt.subplot(2, 2, 2)
-sns.scatterplot(data=results, x='pop_density', y='new_buildings')
-plt.title('Population Density vs New Development')
-
-plt.tight_layout()
-plt.savefig('urban_analysis.png', dpi=300, bbox_inches='tight')
-print("\\nAnalysis complete! Visualization saved as 'urban_analysis.png'")`,
-       codeLanguage: 'python'
-    }
-  }
-]
-
-export function ChatInterface({ selectedFiles, onFileDeselect, className }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>(mockMessages)
+export function ChatInterface({ selectedFiles, onFileDeselect, onFileAttach, className }: ChatInterfaceProps) {
+  const [messages, setMessages] = useState<ChatMessage[]>(mockChatMessages)
   const [inputValue, setInputValue] = useState('')
   const [isThinking, setIsThinking] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
@@ -130,6 +48,7 @@ export function ChatInterface({ selectedFiles, onFileDeselect, className }: Chat
   const [isDeepDiscoveryActive, setIsDeepDiscoveryActive] = useState(false)
   const [discoveryQuery, setDiscoveryQuery] = useState('')
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
+  const [executingCode, setExecutingCode] = useState<Set<string>>(new Set())
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -159,35 +78,55 @@ export function ChatInterface({ selectedFiles, onFileDeselect, className }: Chat
     setIsThinking(true)
 
     try {
-      // Call real GeoGPT API with enhanced parameters
-      const response = await chatService.sendMessage(
-        currentInput,
-        selectedFiles, // Pass selected files as context
-        true, // Include thinking
-        true, // Include sources
-        webSearchEnabled, // Use web search based on user preference
-        4000 // Max context length
-      )
-
+      // Simulate thinking delay
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      
+      // Generate mock response
+      const mockResponse = generateMockChatResponse(currentInput)
+      
       setIsThinking(false)
       
+      // Add thinking message if available
+      if (mockResponse.thinking) {
+        const thinkingMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: 'Let me analyze this step by step...',
+          timestamp: new Date(),
+          type: 'thinking',
+          metadata: {
+            thinking: mockResponse.thinking,
+            sources: mockResponse.sources?.map(source => ({
+              filename: source.title,
+              relevanceScore: source.relevance,
+              excerpt: source.excerpt,
+              pageNumber: Math.floor(Math.random() * 200) + 1,
+              type: source.type,
+              url: source.url
+            }))
+          }
+        }
+        setMessages(prev => [...prev, thinkingMessage])
+        
+        // Simulate processing delay
+        await new Promise(resolve => setTimeout(resolve, 2000))
+      }
+      
       const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
+        id: (Date.now() + 2).toString(),
         role: 'assistant',
-        content: response.response,
+        content: mockResponse.response,
         timestamp: new Date(),
         type: 'text',
         metadata: {
-          thinking: response.thinking,
-          processingTime: response.processingTime,
-          tokens: response.tokens?.total || 0,
-          sources: response.sources?.map(source => ({
-            filename: source.filename,
-            relevanceScore: source.relevance_score, // Map API field to frontend format
+          processingTime: mockResponse.processingTime,
+          tokens: mockResponse.tokens?.total || 0,
+          sources: mockResponse.sources?.map(source => ({
+            filename: source.title,
+            relevanceScore: source.relevance,
             excerpt: source.excerpt,
-            pageNumber: source.page_number, // Map API field to frontend format
+            pageNumber: Math.floor(Math.random() * 200) + 1,
             type: source.type,
-            section: source.section,
             url: source.url
           }))
         }
@@ -195,13 +134,32 @@ export function ChatInterface({ selectedFiles, onFileDeselect, className }: Chat
       
       setMessages(prev => [...prev, assistantMessage])
       
+      // If the query seems code-related, add a code example
+      if (currentInput.toLowerCase().includes('code') || currentInput.toLowerCase().includes('python') || currentInput.toLowerCase().includes('analysis')) {
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        const codeMessage: ChatMessage = {
+          id: (Date.now() + 3).toString(),
+          role: 'assistant',
+          content: 'Here\'s a Python implementation for this analysis:',
+          timestamp: new Date(),
+          type: 'code',
+          metadata: {
+            code: generateSampleCode(currentInput),
+            codeLanguage: 'python'
+          }
+        }
+        
+        setMessages(prev => [...prev, codeMessage])
+      }
+      
     } catch (error) {
       setIsThinking(false)
       
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `I apologize, but I encountered an error: ${handleApiError(error)}. Please try again.`,
+        content: `I apologize, but I encountered an error while processing your request: ${handleApiError(error)}. Please try again or rephrase your question.`,
         timestamp: new Date(),
         type: 'text'
       }
@@ -228,180 +186,336 @@ export function ChatInterface({ selectedFiles, onFileDeselect, className }: Chat
   }
 
   const handleDeepDiscovery = () => {
-    if (inputValue.trim()) {
-      setDiscoveryQuery(inputValue.trim())
-      setInputValue('')
-      setIsDeepDiscoveryActive(true)
-    }
+    setDiscoveryQuery(inputValue)
+    setIsDeepDiscoveryActive(true)
+    setInputValue('')
+  }
+
+  const handleCodeExecution = (messageId: string) => {
+    setExecutingCode(prev => new Set(prev).add(messageId))
+    
+    // Simulate execution completion after 3-8 seconds
+    setTimeout(() => {
+      setExecutingCode(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(messageId)
+        return newSet
+      })
+    }, 3000 + Math.random() * 5000)
+  }
+
+  const handleStopExecution = (messageId: string) => {
+    setExecutingCode(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(messageId)
+      return newSet
+    })
   }
 
   const ThinkingIndicator = () => (
-    <div className="flex items-center space-x-2 p-4 bg-muted/50 rounded-lg">
-      <Brain className="h-5 w-5 text-primary animate-pulse" />
-      <div className="thinking-dots">
-        <div></div>
-        <div></div>
-        <div></div>
-      </div>
-      <span className="text-sm text-muted-foreground">Thinking...</span>
+    <div className="flex items-center space-x-2 text-blue-500 animate-pulse">
+      <Brain className="h-4 w-4" />
+      <span className="text-sm">Analyzing your request...</span>
+      <Loader2 className="h-4 w-4 animate-spin" />
     </div>
   )
 
   const MessageSources = ({ sources }: { sources: DocumentSource[] }) => (
-    <div className="mt-3 p-3 bg-muted/30 rounded-lg border">
-      <div className="flex items-center space-x-2 mb-2">
-        <FileText className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-medium">Sources</span>
+    <div className="mt-4 border-t pt-3">
+      <h4 className="text-sm font-medium text-muted-foreground mb-2">Sources:</h4>
+      <div className="space-y-2">
+        {sources.map((source, index) => (
+          <div key={index} className="flex items-start space-x-2 text-xs bg-muted/50 rounded p-2">
+            <div className="flex-shrink-0 mt-0.5">
+              {source.type === 'knowledge_base' && <FileText className="h-3 w-3 text-blue-500" />}
+              {source.type === 'web_search' && <Globe className="h-3 w-3 text-green-500" />}
+              {source.type === 'wikipedia' && <Database className="h-3 w-3 text-purple-500" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center space-x-2">
+                <span className="font-medium text-foreground">{source.filename}</span>
+                {source.pageNumber && (
+                  <span className="text-muted-foreground">p. {source.pageNumber}</span>
+                )}
+                <span className="text-xs bg-primary/10 text-primary px-1 rounded">
+                  {(source.relevanceScore * 100).toFixed(0)}%
+                </span>
+                {source.url && (
+                  <a href={source.url} target="_blank" rel="noopener noreferrer" 
+                     className="text-blue-500 hover:text-blue-700">
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
+              <p className="text-muted-foreground mt-1 line-clamp-2">{source.excerpt}</p>
+            </div>
+          </div>
+        ))}
       </div>
-      {sources.map((source, index) => (
-        <div key={index} className="text-xs text-muted-foreground mb-1">
-          <span className="font-medium">{source.filename}</span>
-          {source.pageNumber && <span> (Page {source.pageNumber})</span>}
-          <span className="ml-2 text-green-600">
-            {Math.round(source.relevanceScore * 100)}% match
-          </span>
-          <p className="mt-1 text-muted-foreground italic">
-            "{source.excerpt}"
-          </p>
-        </div>
-      ))}
     </div>
   )
+
+  const MessageMetadata = ({ metadata }: { metadata: any }) => (
+    <div className="mt-2 flex items-center space-x-4 text-xs text-muted-foreground">
+      {metadata.processingTime && (
+        <div className="flex items-center space-x-1">
+          <Clock className="h-3 w-3" />
+          <span>{metadata.processingTime.toFixed(1)}s</span>
+        </div>
+      )}
+      {metadata.tokens && (
+        <div className="flex items-center space-x-1">
+          <Zap className="h-3 w-3" />
+          <span>{metadata.tokens} tokens</span>
+        </div>
+      )}
+    </div>
+  )
+
+  const generateSampleCode = (query: string) => {
+    if (query.toLowerCase().includes('flood')) {
+      return `import geopandas as gpd
+import rasterio
+import numpy as np
+from rasterio.plot import show
+import matplotlib.pyplot as plt
+
+# Load elevation data
+dem = rasterio.open('elevation.tif')
+elevation = dem.read(1)
+
+# Identify flood-prone areas (elevation < 10m)
+flood_prone = elevation < 10
+
+# Calculate flood risk zones
+risk_zones = np.where(flood_prone, 'High Risk', 'Low Risk')
+
+# Visualize results
+fig, ax = plt.subplots(figsize=(10, 8))
+show(elevation, ax=ax, cmap='terrain', title='Flood Risk Analysis')
+plt.show()
+
+print(f"High risk area: {np.sum(flood_prone)} pixels")`
+    }
+    
+    if (query.toLowerCase().includes('ndvi') || query.toLowerCase().includes('vegetation')) {
+      return `import rasterio
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Load satellite bands
+with rasterio.open('red_band.tif') as red_src:
+    red = red_src.read(1).astype(float)
+
+with rasterio.open('nir_band.tif') as nir_src:
+    nir = nir_src.read(1).astype(float)
+
+# Calculate NDVI
+ndvi = (nir - red) / (nir + red)
+
+# Classify vegetation health
+healthy_veg = ndvi > 0.6
+moderate_veg = (ndvi > 0.3) & (ndvi <= 0.6)
+sparse_veg = (ndvi > 0.1) & (ndvi <= 0.3)
+
+# Visualize results
+plt.figure(figsize=(12, 8))
+plt.imshow(ndvi, cmap='RdYlGn', vmin=-1, vmax=1)
+plt.colorbar(label='NDVI')
+plt.title('Vegetation Health Analysis')
+plt.show()
+
+print(f"Healthy vegetation: {np.sum(healthy_veg)} pixels")
+print(f"Moderate vegetation: {np.sum(moderate_veg)} pixels")`
+    }
+    
+    return `import geopandas as gpd
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Load and analyze spatial data
+gdf = gpd.read_file('data.shp')
+
+# Perform spatial analysis
+analysis_result = gdf.describe()
+print("Spatial Analysis Results:")
+print(analysis_result)
+
+# Create visualization
+gdf.plot(figsize=(10, 8), alpha=0.7)
+plt.title('Geospatial Analysis Results')
+plt.show()`
+  }
 
   return (
     <div className={cn("flex flex-col h-full", className)}>
       {/* Selected Files Bar */}
       {selectedFiles.length > 0 && (
-        <div className="p-3 border-b bg-muted/30">
-          <div className="flex items-center space-x-2 mb-2">
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Context Files ({selectedFiles.length})</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {selectedFiles.map(fileId => (
-              <div
-                key={fileId}
-                className="flex items-center space-x-1 bg-primary/10 text-primary px-2 py-1 rounded-md text-xs"
-              >
-                <span>File_{fileId}</span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-4 w-4 hover:bg-primary/20"
-                  onClick={() => onFileDeselect(fileId)}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-            ))}
+        <div className="border-b bg-muted/30 p-3">
+          <div className="flex items-center space-x-2 text-sm">
+            <FileText className="h-4 w-4 text-primary" />
+            <span className="font-medium">Selected files ({selectedFiles.length}):</span>
+            <div className="flex flex-wrap gap-1">
+              {selectedFiles.map((fileId) => (
+                <span key={fileId} className="inline-flex items-center bg-primary/10 text-primary border border-primary/20 px-2 py-1 rounded text-xs">
+                  {fileId}
+                  <button 
+                    onClick={() => onFileDeselect(fileId)}
+                    className="ml-1 hover:text-destructive transition-colors"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       )}
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+      <div className="flex-1 overflow-auto p-4 space-y-4">
         {messages.map((message) => (
-          <div
-            key={message.id}
-            className={cn(
-              "flex",
-              message.role === 'user' ? "justify-end" : "justify-start"
-            )}
-          >
-            <div
-              className={cn(
-                "max-w-[85%] rounded-lg p-4 relative group",
-                message.role === 'user'
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted"
-              )}
-            >
-              {/* Message Content */}
-              <div className="prose prose-sm max-w-none">
-                <p className="m-0">{message.content}</p>
-              </div>
-
-              {/* Code Execution Section */}
-              {message.metadata?.code && (
-                <div className="mt-3">
-                  <CodeExecution
-                    code={message.metadata.code}
-                    language={message.metadata.codeLanguage || 'python'}
-                    output={message.metadata.executionResult}
-                    isExecuting={false}
-                    onExecute={() => {
-                      console.log('Execute code:', message.metadata?.code)
-                    }}
+          <div key={message.id} className={cn(
+            "flex items-start space-x-3",
+            message.role === 'user' ? 'flex-row-reverse space-x-reverse' : 'flex-row'
+          )}>
+            {/* Avatar */}
+            <div className="flex-shrink-0">
+              {message.role === 'user' ? (
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                  <User className="h-4 w-4 text-white" />
+                </div>
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-background border-2 border-primary/20 overflow-hidden flex items-center justify-center">
+                  <img 
+                    src="/logo.png" 
+                    alt="GeoGPT" 
+                    className="w-full h-full object-contain"
                   />
                 </div>
               )}
-
-              {/* Thinking Section */}
-              {message.metadata?.thinking && (
-                <div className="mt-3 border-t pt-3">
-                  <button
-                    onClick={() => setExpandedThinking(
-                      expandedThinking === message.id ? null : message.id
-                    )}
-                    className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <Brain className="h-4 w-4" />
-                    <span>Chain of Thought</span>
-                    {expandedThinking === message.id ? 
-                      <ChevronUp className="h-4 w-4" /> : 
-                      <ChevronDown className="h-4 w-4" />
-                    }
-                  </button>
-                  
-                  {expandedThinking === message.id && (
-                    <div className="mt-2 p-3 bg-background/50 rounded-md text-sm">
-                      <p className="text-muted-foreground italic">
-                        {message.metadata.thinking}
-                      </p>
-                    </div>
+            </div>
+            
+            {/* Message Content */}
+            <div className={cn(
+              "max-w-[calc(100%-3rem)] rounded-lg p-4",
+              message.role === 'user' 
+                ? 'bg-primary text-primary-foreground' 
+                : message.type === 'thinking'
+                  ? 'bg-muted border'
+                  : message.type === 'code'
+                    ? 'bg-muted border'
+                    : 'bg-muted'
+            )}>
+              {/* Message Header */}
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-2">
+                  {message.role === 'assistant' && message.type === 'thinking' && (
+                    <Brain className="h-4 w-4 text-blue-500" />
+                  )}
+                  {message.role === 'assistant' && message.type === 'code' && (
+                    <Code className="h-4 w-4 text-gray-500" />
+                  )}
+                  <span className="text-xs text-muted-foreground">
+                    {message.timestamp.toLocaleTimeString()}
+                  </span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  {message.type === 'code' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => copyToClipboard(message.metadata?.code || '', message.id)}
+                    >
+                      {copiedText === message.id ? (
+                        <Check className="h-3 w-3 text-green-500" />
+                      ) : (
+                        <Copy className="h-3 w-3" />
+                      )}
+                    </Button>
                   )}
                 </div>
-              )}
-
-              {/* Sources */}
-              {message.metadata?.sources && (
-                <MessageSources sources={message.metadata.sources} />
-              )}
-
-              {/* Message Actions */}
-              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={() => copyToClipboard(message.content, message.id)}
-                >
-                  {copiedText === message.id ? 
-                    <Check className="h-3 w-3" /> : 
-                    <Copy className="h-3 w-3" />
-                  }
-                </Button>
               </div>
 
-              {/* Timestamp */}
-              <div className="text-xs text-muted-foreground mt-2 opacity-70" suppressHydrationWarning>
-                {message.timestamp.toLocaleTimeString()}
+              {/* Message Content */}
+              <div className="space-y-3">
+                <p className="whitespace-pre-wrap">{message.content}</p>
+
+                {/* Thinking Process */}
+                {message.type === 'thinking' && message.metadata?.thinking && (
+                  <div className="border-t pt-3">
+                    <button
+                      onClick={() => setExpandedThinking(
+                        expandedThinking === message.id ? null : message.id
+                      )}
+                      className="flex items-center space-x-2 text-sm font-medium text-primary hover:text-primary/80"
+                    >
+                      {expandedThinking === message.id ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                      <span>View reasoning process</span>
+                    </button>
+                    
+                    {expandedThinking === message.id && (
+                      <div className="mt-3 p-3 bg-card rounded border text-sm">
+                        <h4 className="font-medium mb-2">🤔 Thinking Process:</h4>
+                        <div className="prose prose-sm max-w-none text-foreground">
+                          {message.metadata.thinking.split('\n').map((line, index) => (
+                            <p key={index} className="mb-2">{line}</p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Code Display */}
+                {message.type === 'code' && message.metadata?.code && (
+                  <div className="mt-3">
+                    <CodeExecution
+                      code={message.metadata.code}
+                      language={message.metadata.codeLanguage || 'python'}
+                      isExecuting={executingCode.has(message.id)}
+                      onExecute={() => handleCodeExecution(message.id)}
+                      onStop={() => handleStopExecution(message.id)}
+                      isExpandable={true}
+                    />
+                  </div>
+                )}
+
+                {/* Sources */}
+                {message.metadata?.sources && message.metadata.sources.length > 0 && (
+                  <MessageSources sources={message.metadata.sources} />
+                )}
+
+                {/* Metadata */}
+                {message.metadata && (message.metadata.processingTime || message.metadata.tokens) && (
+                  <MessageMetadata metadata={message.metadata} />
+                )}
               </div>
             </div>
           </div>
         ))}
 
         {/* Thinking Indicator */}
-        {isThinking && <ThinkingIndicator />}
-
-        {/* Streaming Indicator */}
-        {isStreaming && (
-          <div className="flex justify-start">
-            <div className="bg-muted rounded-lg p-4">
-              <div className="flex items-center space-x-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm text-muted-foreground">Generating response...</span>
+        {isThinking && (
+          <div className="flex items-start space-x-3">
+            {/* Avatar */}
+            <div className="flex-shrink-0">
+              <div className="w-8 h-8 rounded-full bg-background border-2 border-primary/20 overflow-hidden flex items-center justify-center">
+                <img 
+                  src="/logo.png" 
+                  alt="GeoGPT" 
+                  className="w-full h-full object-contain"
+                />
               </div>
+            </div>
+            
+            {/* Thinking Content */}
+            <div className="bg-muted rounded-lg p-4">
+              <ThinkingIndicator />
             </div>
           </div>
         )}
@@ -409,34 +523,29 @@ export function ChatInterface({ selectedFiles, onFileDeselect, className }: Chat
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Enhanced Input Area */}
-      <div className="p-4">
+      {/* Input Area */}
+      <div className="border-t p-4">
         <EnhancedChatInput
           value={inputValue}
           onChange={setInputValue}
           onSend={handleSendMessage}
           onDeepDiscovery={handleDeepDiscovery}
-          onGenerateCode={() => {
-            // Add code generation logic
-            console.log('Generate code requested')
-          }}
-          onAnalyzePattern={() => {
-            // Add pattern analysis logic
-            console.log('Analyze pattern requested')
-          }}
           disabled={isThinking || isStreaming}
           selectedFiles={selectedFiles}
           webSearchEnabled={webSearchEnabled}
           onWebSearchToggle={setWebSearchEnabled}
+          onFileAttach={onFileAttach}
         />
       </div>
-      
-      {/* Deep Discovery Overlay */}
-      <DeepDiscovery
-        isActive={isDeepDiscoveryActive}
-        onToggle={() => setIsDeepDiscoveryActive(false)}
-        query={discoveryQuery}
-      />
+
+      {/* Deep Discovery Modal */}
+      {isDeepDiscoveryActive && (
+        <DeepDiscovery
+          isActive={isDeepDiscoveryActive}
+          onToggle={() => setIsDeepDiscoveryActive(false)}
+          query={discoveryQuery}
+        />
+      )}
     </div>
   )
 } 

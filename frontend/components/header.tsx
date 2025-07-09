@@ -60,11 +60,13 @@ export function Header({ onToggleSidebar, sidebarOpen, onToggleStatus, className
           </Button>
           
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">G</span>
-            </div>
+            <img 
+              src="/logo.png" 
+              alt="JugJugGeo Logo" 
+              className="w-8 h-8 object-contain"
+            />
             <div className="flex flex-col">
-              <h1 className="text-lg font-semibold text-foreground">GeoGPT</h1>
+              <h1 className="text-lg font-semibold text-foreground">JugJugGeo</h1>
               <p className="text-xs text-muted-foreground -mt-1">Geospatial AI Assistant</p>
             </div>
           </div>

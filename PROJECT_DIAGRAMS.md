@@ -95,14 +95,15 @@ graph TB
     end
     
     subgraph "State Management"
-        STORE[Zustand Store] --> FSTATE[File State]
-        STORE --> CSTATE[Chat State]
-        STORE --> DSTATE[Discovery State]
-        STORE --> SCODE[Code State]
+        LOCAL[Local Component State<br/>React useState Hooks]
+        LOCAL --> FSTATE[File State<br/>- files, searchQuery<br/>- selectedFiles, viewMode]
+        LOCAL --> CSTATE[Chat State<br/>- messages, inputValue<br/>- isThinking, webSearch]
+        LOCAL --> DSTATE[Discovery State<br/>- steps, progress<br/>- sources, reports]
+        LOCAL --> SCODE[Code State<br/>- executionState, results<br/>- output, errors]
     end
     
     subgraph "API Layer"
-        API[API Client] --> CHAT_API[Chat Service]
+        API[API Client<br/>lib/api.ts] --> CHAT_API[Chat Service]
         API --> FILE_API[File Service]
         API --> DISC_API[Discovery Service]
         API --> CODE_API[Code Service]
@@ -115,49 +116,52 @@ graph TB
 ### AWS Deployment Architecture
 ```mermaid
 graph TB
-    subgraph "AWS Cloud Infrastructure"
-        subgraph "EC2 Instance (g5.xlarge)"
-            EC2[Ubuntu 22.04<br/>NVIDIA GPU Drivers]
-            EC2 --> DOCKER[Docker Engine<br/>GPU Support]
+    subgraph AWS["AWS Cloud Infrastructure"]
+        subgraph EC2["EC2 Instance (g5.xlarge)"]
+            EC2_HOST["Ubuntu 24.04<br/>NVIDIA GPU Drivers"]
+            EC2_HOST --> DOCKER["Docker Engine<br/>GPU Support"]
             
-            DOCKER --> C1[Container: Embedding Service<br/>Port 8810<br/>GeoEmbedding 7B]
-            DOCKER --> C2[Container: Reranking Service<br/>Port 8811<br/>GeoReranker 568M]
-            DOCKER --> C3[Container: Main API<br/>Port 8812<br/>FastAPI + Services]
+            DOCKER --> CONTAINER["Container: geogpt-rag-system<br/>All Services in One Container"]
             
-            C3 --> VOL[Volumes]
-            VOL --> MODELS[/app/models<br/>Model Weights]
-            VOL --> LOGS[/app/logs<br/>Service Logs]
-            VOL --> DATA[/app/data<br/>User Data]
+            CONTAINER --> SERVICES["Internal Services"]
+            SERVICES --> EMB_SVC["Embedding Service<br/>Port 8810<br/>GeoEmbedding 7B"]
+            SERVICES --> RNK_SVC["Reranking Service<br/>Port 8811<br/>GeoReranker 568M"]
+            SERVICES --> API_SVC["Main API Service<br/>Port 8812<br/>FastAPI + GIS Tools"]
+            
+            CONTAINER --> VOL["Volumes"]
+            VOL --> MODELS["/app/models<br/>Model Weights"]
+            VOL --> LOGS["/app/logs<br/>Service Logs"]
+            VOL --> DATA["/app/data<br/>User Data"]
+            VOL --> CHUNKS["/app/split_chunks<br/>Document Chunks"]
         end
         
-        subgraph "External AWS Services"
-            SAGE[AWS Sagemaker<br/>GeoGPT-R1 Endpoint<br/>us-east-1]
-            S3[S3 Bucket<br/>Model Storage<br/>Backups]
+        subgraph EXT_AWS["External AWS Services"]
+            SAGE["AWS Sagemaker<br/>GeoGPT-R1 Endpoint<br/>us-east-1"]
+            S3["S3 Bucket<br/>Model Storage<br/>Backups"]
         end
         
-        subgraph "Network Configuration"
-            SG[Security Group]
-            SG --> |8810| P1[Embedding API]
-            SG --> |8811| P2[Reranking API]
-            SG --> |8812| P3[Main API]
-            SG --> |22| SSH[SSH Access]
+        subgraph NETWORK["Network Configuration"]
+            SG["Security Group"]
+            SG --> P1["Port 8810<br/>Embedding API"]
+            SG --> P2["Port 8811<br/>Reranking API"]
+            SG --> P3["Port 8812<br/>Main API"]
+            SG --> SSH["Port 22<br/>SSH Access"]
             
-            EIP[Elastic IP<br/>3.234.222.18]
         end
     end
     
-    subgraph "External Services"
-        ZIL[Zilliz Cloud<br/>Vector Database<br/>us-west-1]
-        WEB[Web APIs<br/>DuckDuckGo<br/>Wikipedia]
-        PC[Planetary Computer<br/>STAC Catalog]
-        ISRO[Bhoonidhi<br/>ISRO APIs]
+    subgraph EXTERNAL["External Services"]
+        ZIL["Zilliz Cloud<br/>Vector Database<br/>us-west-1"]
+        WEB["Web APIs<br/>DuckDuckGo<br/>Wikipedia"]
+        PC["Planetary Computer<br/>STAC Catalog"]
+        ISRO["Bhoonidhi<br/>ISRO APIs"]
     end
     
-    C1 --> ZIL
-    C3 --> SAGE
-    C3 --> WEB
-    C3 --> PC
-    C3 --> ISRO
+    API_SVC --> ZIL
+    API_SVC --> SAGE
+    API_SVC --> WEB
+    API_SVC --> PC
+    API_SVC --> ISRO
 ```
 
 ## 3. Core Workflows
@@ -486,28 +490,24 @@ graph TB
         
         DOCKER --> NET[Bridge Network<br/>geogpt-network]
         
-        NET --> C1[embedding-service:latest<br/>Port: 8810]
-        NET --> C2[reranking-service:latest<br/>Port: 8811]
-        NET --> C3[geogpt-api:latest<br/>Port: 8812]
+        NET --> CONTAINER[geogpt-rag:latest<br/>Single Container<br/>Ports: 8810, 8811, 8812]
         
-        C1 --> V1[Volume: models<br/>/app/models]
-        C2 --> V1
-        C3 --> V1
+        CONTAINER --> PROCESSES[Internal Processes]
+        PROCESSES --> EMB_PROC[Embedding Service<br/>embedding_api.py<br/>Port 8810]
+        PROCESSES --> RNK_PROC[Reranking Service<br/>reranker_fast_api.py<br/>Port 8811]
+        PROCESSES --> API_PROC[Main API Service<br/>geogpt_api.py<br/>Port 8812]
         
-        C3 --> V2[Volume: logs<br/>/app/logs]
-        C3 --> V3[Volume: data<br/>/app/data]
+        CONTAINER --> V1[Volume: models<br/>/app/models]
+        CONTAINER --> V2[Volume: logs<br/>/app/logs]
+        CONTAINER --> V3[Volume: data<br/>/app/data]
+        CONTAINER --> V4[Volume: split_chunks<br/>/app/split_chunks]
         
         GPU[NVIDIA GPU<br/>Driver 535.104]
-        GPU --> C1
-        GPU --> C2
+        GPU --> CONTAINER
     end
     
     subgraph "Container Details"
-        C1_D[Embedding Container<br/>- Python 3.8<br/>- PyTorch 2.0<br/>- Transformers<br/>- 16GB RAM]
-        
-        C2_D[Reranking Container<br/>- Python 3.8<br/>- Sentence-BERT<br/>- 8GB RAM]
-        
-        C3_D[API Container<br/>- Python 3.8<br/>- FastAPI<br/>- QGIS Libraries<br/>- WhiteboxTools<br/>- 32GB RAM]
+        DETAILS[Single Container (geogpt-rag-system)<br/>- Ubuntu 24.04 base<br/>- Python 3.8<br/>- PyTorch 2.0 + Transformers<br/>- FastAPI + QGIS + WhiteboxTools<br/>- All services in one container<br/>- 64GB RAM recommended]
     end
 ```
 

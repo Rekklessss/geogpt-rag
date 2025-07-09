@@ -82,17 +82,19 @@ sequenceDiagram
 
 ## 🔧 Core Components
 
+**Architecture Note**: All services run within a single Docker container (`geogpt-rag-system`) but expose different ports for API access.
+
 ### 1. Embedding Service (Port 8810)
 
 **Purpose**: Converts text into high-dimensional vectors for semantic search
 
 **Technical Details**:
-- **Model**: GeoEmbedding - Fine-tuned Mistral-7B
+- **Model**: GeoEmbedding - Fine-tuned Mistral-7B (auto-downloaded)
 - **Output**: 4096-dimensional vectors
 - **Specialization**: Geospatial terminology and concepts
 - **Performance**: ~124ms average latency
-- **Memory**: 16GB RAM required
-- **GPU**: NVIDIA GPU recommended
+- **Memory**: Shared container memory (32GB+ recommended)
+- **GPU**: Shared NVIDIA GPU access
 
 **Implementation**:
 ```python
@@ -121,11 +123,11 @@ class EmbeddingService:
 **Purpose**: Precision relevance scoring for retrieved documents
 
 **Technical Details**:
-- **Model**: GeoReranker - Enhanced BGE-M3
+- **Model**: GeoReranker - Enhanced BGE-M3 (auto-downloaded)
 - **Architecture**: Cross-encoder for pairwise scoring
 - **Output**: Normalized scores (0-1)
 - **Performance**: ~89ms average latency
-- **Memory**: 8GB RAM required
+- **Memory**: Shared container memory
 
 **Implementation**:
 ```python
@@ -152,6 +154,7 @@ class RerankingService:
 - **Endpoints**: Chat, Discovery, Code Execution, File Management
 - **Middleware**: CORS, rate limiting, error handling
 - **Documentation**: Auto-generated OpenAPI/Swagger
+- **Integration**: Coordinates with internal embedding/reranking services
 
 **Core Endpoints**:
 ```python
@@ -640,9 +643,9 @@ Response 204: No Content
 ### Prerequisites
 
 - **Hardware**:
-  - GPU: NVIDIA GPU with 24GB+ VRAM (recommended)
-  - RAM: 64GB minimum
-  - Storage: 500GB SSD
+  - GPU: NVIDIA GPU with 16GB+ VRAM (recommended, models auto-download)
+  - RAM: 32GB minimum, 64GB recommended
+  - Storage: 500GB SSD (models are ~7GB total)
   - CPU: 8+ cores
 
 - **Software**:
@@ -651,6 +654,7 @@ Response 204: No Content
   - Docker Compose 2.0+
   - NVIDIA Docker runtime
   - CUDA 11.8+
+  - Git LFS (for model downloads)
 
 ### Quick Start Deployment
 
@@ -673,20 +677,28 @@ cp .env.example .env
 version: '3.8'
 
 services:
-  embedding-service:
+  geogpt-rag:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: geogpt-embedding
-    ports:
-      - "8810:8810"
-    volumes:
-      - ./models:/app/models
-      - ./logs:/app/logs
+    image: geogpt-rag:latest
+    container_name: geogpt-rag-system
+    restart: unless-stopped
     environment:
       - CUDA_VISIBLE_DEVICES=0
-      - MODEL_NAME=GeoEmbedding
-      - PORT=8810
+      - PYTHONPATH=/app
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_REGION=us-east-1
+    ports:
+      - "8810:8810"  # Embedding service
+      - "8811:8811"  # Reranking service
+      - "8812:8812"  # Main API service
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./split_chunks:/app/split_chunks
+      - ~/.aws:/root/.aws:ro  # AWS credentials
     deploy:
       resources:
         reservations:
@@ -694,37 +706,12 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8810/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    networks:
+      - geogpt-network
 
-  reranking-service:
-    # Similar configuration for port 8811
-
-  main-api:
-    build:
-      context: .
-      dockerfile: Dockerfile.gis
-    container_name: geogpt-api
-    ports:
-      - "8812:8812"
-    volumes:
-      - ./models:/app/models
-      - ./data:/app/data
-      - ./logs:/app/logs
-    environment:
-      - EMBEDDING_URL=http://embedding-service:8810
-      - RERANKING_URL=http://reranking-service:8811
-      - ZILLIZ_URI=${ZILLIZ_URI}
-      - ZILLIZ_TOKEN=${ZILLIZ_TOKEN}
-      - SAGEMAKER_ENDPOINT=${SAGEMAKER_ENDPOINT}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-    depends_on:
-      - embedding-service
-      - reranking-service
+networks:
+  geogpt-network:
+    driver: bridge
 ```
 
 ### AWS Deployment
@@ -828,7 +815,7 @@ tar -czf configs-$(date +%Y%m%d).tar.gz /app/configs
 ### Environment Variables
 
 ```bash
-# Core Services
+# Core Services (All in single container)
 EMBEDDING_SERVER_URL=http://localhost:8810
 RERANKING_SERVER_URL=http://localhost:8811
 MAIN_API_PORT=8812
@@ -857,6 +844,12 @@ MAX_FILE_SIZE_MB=100
 MAX_WORKERS=4
 REQUEST_TIMEOUT=300
 CACHE_TTL=3600
+
+# Frontend (Separate deployment)
+NEXT_PUBLIC_API_HOST=3.81.101.190
+NEXT_PUBLIC_EMBEDDING_PORT=8810
+NEXT_PUBLIC_RERANKING_PORT=8811
+NEXT_PUBLIC_GEOGPT_PORT=8812
 ```
 
 ### Application Configuration
