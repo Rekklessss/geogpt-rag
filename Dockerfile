@@ -103,6 +103,15 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir \
     boto3>=1.34.0 \
     tiktoken>=0.5.0
 
+# Install LLM provider dependencies (required for GeoGPT API)
+RUN python3 -m pip install --break-system-packages --no-cache-dir \
+    openai>=1.97.0 \
+    litellm>=1.74.0 \
+    pydantic-settings>=2.10.0 \
+    python-dotenv>=1.1.0 \
+    langchain-milvus>=0.2.1 \
+    langchain-community>=0.3.27
+
 # Install ALL remaining requirements from rag_server/requirements.txt
 RUN python3 -m pip install --break-system-packages --no-cache-dir \
     python-multipart>=0.0.6 \

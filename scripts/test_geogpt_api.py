@@ -145,12 +145,17 @@ def test_chat_basic():
             
             # Verify it's not mock data
             response_text = data.get('response', '')
-            if "mock" in response_text.lower() or "placeholder" in response_text.lower():
+            if response_text and ("mock" in response_text.lower() or "placeholder" in response_text.lower()):
                 print("❌ WARNING: Response appears to contain mock data!")
                 return False
             
-            if data.get('thinking'):
-                print(f"   Thinking provided: {len(data['thinking'])} chars")
+            # Check thinking with proper null handling
+            thinking = data.get('thinking')
+            if thinking is not None and thinking:
+                thinking_str = str(thinking) if not isinstance(thinking, str) else thinking
+                print(f"   Thinking provided: {len(thinking_str)} chars")
+            else:
+                print("   No thinking data provided")
             
             return True
         else:
@@ -159,6 +164,9 @@ def test_chat_basic():
             
     except Exception as e:
         print(f"❌ Chat test failed: {e}")
+        # Add detailed error information for debugging
+        import traceback
+        print(f"   Error details: {traceback.format_exc()}")
         return False
 
 def test_chat_with_web_search():
@@ -455,7 +463,7 @@ def verify_llm_provider_system() -> Tuple[bool, List[str]]:
             
         # Check for key components
         required_components = [
-            'class LLMManager',
+            'class LLMProviderManager',
             'get_llm_manager',
             'openai',
             'gpt-4o-mini',
@@ -474,7 +482,17 @@ def verify_llm_provider_system() -> Tuple[bool, List[str]]:
             from llm_providers import get_llm_manager
             
             llm_manager = get_llm_manager()
-            print(f"✅ LLM Manager loaded: {llm_manager.get_active_provider()}")
+            print(f"✅ LLM Manager loaded: {llm_manager.get_current_provider()}")
+            
+            # Test simple generation to verify functionality
+            try:
+                test_response = llm_manager.generate("Hello")
+                if test_response:
+                    print(f"✅ LLM generation test successful")
+                else:
+                    issues.append("LLM generation test returned empty response")
+            except Exception as gen_e:
+                issues.append(f"LLM generation test failed: {gen_e}")
             
         except ImportError as e:
             issues.append(f"Cannot import LLM manager: {e}")
@@ -545,7 +563,12 @@ def verify_environment_setup() -> Tuple[bool, List[str]]:
     }
     
     for var, description in required_env_vars.items():
-        if not os.getenv(var):
+        value = os.getenv(var)
+        if not value:
+            # Special handling for EC2_INSTANCE_IP - localhost is acceptable for testing
+            if var == 'EC2_INSTANCE_IP' and config['ec2_ip'] == 'localhost':
+                print(f"✅ {var}: Set to localhost (testing mode)")
+                continue
             issues.append(f"Missing required environment variable: {var} ({description})")
         else:
             print(f"✅ {var}: Set")

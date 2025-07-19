@@ -122,7 +122,6 @@ export interface GeoGPTRequest {
   prompt: string
   context?: string[]
   parameters?: {
-    max_tokens?: number
     temperature?: number
     top_p?: number
     stream?: boolean

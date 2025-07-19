@@ -67,7 +67,7 @@ class InstanceConfigManager:
         
         # Fallback to current production instance for deployment
         if not ec2_ip:
-            ec2_ip = "3.236.251.69"  # Current production EC2 instance
+            ec2_ip = "54.224.133.45"  # Current production EC2 instance
             logger.info("Using current production EC2 instance IP as fallback")
         
         config = InstanceConfig(

@@ -44,7 +44,6 @@ class LLMConfig:
     api_key: Optional[str] = None
     endpoint: Optional[str] = None
     region: Optional[str] = None
-    max_tokens: int = 2048
     temperature: float = 0.7
     top_p: float = 0.95
     timeout: int = 30
@@ -87,7 +86,6 @@ class LLMProviderManager:
                 provider=LLMProvider.OPENAI,
                 model=selected_model,
                 api_key=openai_key,
-                max_tokens=int(os.getenv("OPENAI_MAX_TOKENS", "2048")),  # Lower default for cost
                 temperature=float(os.getenv("OPENAI_TEMPERATURE", "0.7"))
             )
             logger.info(f"OpenAI provider configured with model: {selected_model.value} for cost optimization")
@@ -101,7 +99,6 @@ class LLMProviderManager:
                 model=LLMModel.GEOGPT_R1,
                 endpoint=sagemaker_endpoint,
                 region=aws_region,
-                max_tokens=int(os.getenv("SAGEMAKER_MAX_TOKENS", "2048")),
                 temperature=float(os.getenv("SAGEMAKER_TEMPERATURE", "0.7"))
             )
             logger.info("Sagemaker provider configured")
@@ -145,16 +142,20 @@ class LLMProviderManager:
     def _call_openai(self, messages: List[Dict], config: LLMConfig, **kwargs) -> str:
         """Call OpenAI API using LiteLLM"""
         try:
-            response = completion(
-                model=config.model.value,
-                messages=messages,
-                api_key=config.api_key,
-                max_tokens=config.max_tokens,
-                temperature=config.temperature,
-                top_p=config.top_p,
-                timeout=config.timeout,
-                **kwargs
-            )
+            # Prepare parameters, avoiding conflicts with kwargs
+            params = {
+                'model': config.model.value,
+                'messages': messages,
+                'api_key': config.api_key,
+                'temperature': config.temperature,
+                'top_p': config.top_p,
+                'timeout': config.timeout
+            }
+            
+            # Merge with kwargs, letting kwargs override
+            params.update(kwargs)
+            
+            response = completion(**params)
             
             return response.choices[0].message.content
             
@@ -178,7 +179,7 @@ class LLMProviderManager:
                 "parameters": {
                     "temperature": config.temperature,
                     "top_p": config.top_p,
-                    "max_new_tokens": config.max_tokens,
+                    "max_new_tokens": 2048,  # Fixed value since we removed config.max_tokens
                     "do_sample": True
                 }
             }
@@ -195,7 +196,10 @@ class LLMProviderManager:
             
             # Extract generated text
             if isinstance(result, list) and len(result) > 0:
-                generated_text = result[0].get('generated_text', '')
+                if isinstance(result[0], dict):
+                    generated_text = result[0].get('generated_text', '')
+                else:
+                    generated_text = str(result[0])
             elif isinstance(result, dict):
                 generated_text = result.get('generated_text', result.get('outputs', ''))
             else:
@@ -230,22 +234,30 @@ class LLMProviderManager:
         return "\n\n".join(prompt_parts)
     
     def generate(self, 
-                messages: List[Dict], 
+                messages_or_prompt: Union[List[Dict], str], 
                 provider: Optional[LLMProvider] = None,
                 enable_fallback: bool = True,
-                **kwargs) -> Dict[str, Any]:
+                **kwargs) -> Union[Dict[str, Any], str]:
         """
         Generate response using specified provider with automatic fallback
         
         Args:
-            messages: OpenAI-style messages format
+            messages_or_prompt: OpenAI-style messages format or simple string prompt
             provider: Specific provider to use (None for primary)
             enable_fallback: Whether to use fallback providers on failure
             **kwargs: Additional parameters for the LLM call
             
         Returns:
-            Dict containing response, provider used, and metadata
+            Dict containing response, provider used, and metadata (or just string if prompt input)
         """
+        # Convert string prompt to messages format if needed
+        if isinstance(messages_or_prompt, str):
+            messages = [{"role": "user", "content": messages_or_prompt}]
+            return_string_only = True
+        else:
+            messages = messages_or_prompt
+            return_string_only = False
+            
         target_provider = provider or self.current_provider
         providers_to_try = [target_provider]
         
@@ -291,7 +303,12 @@ class LLMProviderManager:
                 }
                 
                 logger.info(f"LLM call successful with {attempt_provider.value} in {processing_time:.2f}s")
-                return result
+                
+                # Return just the response string if called with string prompt
+                if return_string_only:
+                    return response
+                else:
+                    return result
                 
             except Exception as e:
                 last_error = e

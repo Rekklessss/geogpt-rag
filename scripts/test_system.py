@@ -133,15 +133,25 @@ def test_rag_pipeline():
             
             # Test with new LLM manager
             test_prompt = "What is geospatial analysis? Provide a brief explanation."
-            response = llm_manager.generate(test_prompt, max_tokens=100)
+            response = llm_manager.generate(test_prompt)
             
-            if response and len(response.strip()) > 10:
-                print(f"✓ New LLM provider OK - Response length: {len(response)} characters")
-                print(f"  Sample response: {response[:200]}...")
-                print(f"  LLM Provider: {llm_manager.get_active_provider()}")
+            # Handle both string response and dict response formats
+            if isinstance(response, dict):
+                response_text = response.get('response', str(response))
+            elif isinstance(response, str):
+                response_text = response
+            else:
+                response_text = str(response)
+            
+            if response and len(response_text.strip()) > 10:
+                print(f"✓ New LLM provider OK - Response length: {len(response_text)} characters")
+                print(f"  Sample response: {response_text[:200]}...")
+                print(f"  LLM Provider: {llm_manager.get_current_provider()}")
                 return True
             else:
                 print("✗ New LLM provider failed - Empty or too short response")
+                print(f"  Response type: {type(response)}")
+                print(f"  Response content: {str(response)[:100]}...")
                 return False
                 
         except ImportError:

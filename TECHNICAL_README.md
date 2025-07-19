@@ -271,7 +271,6 @@ class SecureExecutor:
 llm_config = {
     "temperature": 0.7,
     "top_p": 0.95,
-    "max_tokens": 2048,
     "presence_penalty": 0.0,
     "frequency_penalty": 0.0
 }
@@ -865,7 +864,6 @@ class Config:
     CHUNK_OVERLAP = 200
     
     # LLM Parameters
-    MAX_TOKENS = 2048
     TEMPERATURE = 0.7
     TOP_P = 0.95
     PRESENCE_PENALTY = 0.0

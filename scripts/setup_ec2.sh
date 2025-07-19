@@ -20,7 +20,7 @@ REPO_URL="https://github.com/Rekklessss/geogpt-rag.git"
 PROJECT_DIR="$HOME/geogpt-rag"
 
 # Production configuration - Updated with current instance details
-PRODUCTION_EC2_IP="3.236.251.69"
+PRODUCTION_EC2_IP="54.224.133.45"
 PRODUCTION_EC2_ID="i-0cf221c2fca3cb3cf"
 OPENAI_API_KEY="${OPENAI_API_KEY:-YOUR_OPENAI_API_KEY_HERE}"
 ZILLIZ_CLOUD_URI="https://in03-088dd53cf6b3582.serverless.gcp-us-west1.cloud.zilliz.com"
@@ -295,6 +295,14 @@ echo "export OPENAI_API_KEY=\"$OPENAI_API_KEY\"" >> ~/.bashrc
 echo "export ZILLIZ_CLOUD_URI=\"$ZILLIZ_CLOUD_URI\"" >> ~/.bashrc
 echo "export ZILLIZ_CLOUD_TOKEN=\"$ZILLIZ_CLOUD_TOKEN\"" >> ~/.bashrc
 
+# Validate OpenAI API key
+if [ "$OPENAI_API_KEY" = "YOUR_OPENAI_API_KEY_HERE" ] || [ -z "$OPENAI_API_KEY" ]; then
+    echo "⚠️ WARNING: OpenAI API key not set properly!"
+    echo "Please set your API key: export OPENAI_API_KEY='sk-proj-...'"
+    echo "Using placeholder - system will need manual configuration"
+    OPENAI_API_KEY="YOUR_OPENAI_API_KEY_HERE"
+fi
+
 # Create production environment file with cost-optimized LLM settings
 echo "📋 Creating production environment file (cost-optimized)..."
 cat > "$PROJECT_DIR/.env" << EOF
@@ -305,7 +313,6 @@ EC2_REGION=us-east-1
 LLM_PROVIDER=auto
 LLM_MODEL=gpt-4.1-nano-2025-04-14
 OPENAI_API_KEY=$OPENAI_API_KEY
-OPENAI_MAX_TOKENS=2048
 ZILLIZ_CLOUD_URI=$ZILLIZ_CLOUD_URI
 ZILLIZ_CLOUD_TOKEN=$ZILLIZ_CLOUD_TOKEN
 CONTEXT_WINDOW_SIZE=8192
@@ -313,6 +320,37 @@ MAX_CONVERSATION_HISTORY=50
 DATABASE_URL=postgresql://geogpt:geogpt_password@postgres:5432/geogpt_spatial
 POSTGRES_PASSWORD=geogpt_password
 REDIS_URL=redis://redis:6379
+EOF
+
+# Create environment setup instructions
+cat > "$PROJECT_DIR/SET_API_KEY.md" << EOF
+# Setting Up Your OpenAI API Key
+
+## Quick Setup:
+\`\`\`bash
+# Replace with your actual OpenAI API key
+export OPENAI_API_KEY="sk-proj-YOUR-ACTUAL-KEY-HERE"
+
+# Update the .env file
+sed -i 's/YOUR_OPENAI_API_KEY_HERE/sk-proj-YOUR-ACTUAL-KEY-HERE/' .env
+
+# Restart services to pick up new key
+docker-compose restart geogpt-rag
+
+# Test the system
+curl http://localhost:8812/health
+\`\`\`
+
+## Your current setup status:
+- API Key: $(echo "$OPENAI_API_KEY" | cut -c1-15)...
+- LLM Model: gpt-4.1-nano-2025-04-14 (cost-optimized)
+- Instance IP: $PUBLIC_IP
+
+## If you need to get an OpenAI API key:
+1. Go to https://platform.openai.com/api-keys
+2. Create a new API key
+3. Copy the key (starts with sk-proj-)
+4. Run the commands above with your real key
 EOF
 
 # Build Docker images (initial setup)
@@ -326,6 +364,26 @@ sudo docker-compose up -d
 
 echo "⏳ Waiting for services to initialize..."
 sleep 30
+
+# Check if dependencies were installed during Docker build
+echo "🔍 Verifying Docker image has all required dependencies..."
+if sudo docker-compose exec -T geogpt-rag python -c "import openai, litellm, pydantic_settings, dotenv, langchain_milvus" 2>/dev/null; then
+    echo "✅ All required dependencies are installed in Docker image"
+else
+    echo "⚠️ Some dependencies missing from Docker image, installing now..."
+    sudo docker-compose exec -T geogpt-rag pip install --break-system-packages \
+        openai \
+        litellm \
+        pydantic-settings \
+        python-dotenv \
+        langchain-community \
+        langchain-milvus \
+        || echo "❌ Failed to install some dependencies"
+    
+    echo "🔄 Restarting services to load new dependencies..."
+    sudo docker-compose restart geogpt-rag
+    sleep 15
+fi
 
 # Check service health
 echo "🏥 Checking service health..."
@@ -392,13 +450,68 @@ else
     LLM_STATUS=1
 fi
 
-# Run system tests
+# Comprehensive system validation
+echo "🧪 Running comprehensive system validation..."
+
+# First, test individual components
+echo "🔧 Testing individual components..."
+validate_system() {
+    local errors=0
+    
+    # Test database connections
+    echo -n "  Database connectivity: "
+    if sudo docker exec geogpt-rag-system python -c "import psycopg2; conn=psycopg2.connect('postgresql://geogpt:geogpt_password@postgres:5432/geogpt_spatial'); conn.close(); print('OK')" 2>/dev/null | grep -q "OK"; then
+        echo "✅ OK"
+    else
+        echo "❌ Failed"
+        ((errors++))
+    fi
+    
+    # Test Redis connection
+    echo -n "  Redis connectivity: "
+    if sudo docker exec geogpt-redis redis-cli ping 2>/dev/null | grep -q "PONG"; then
+        echo "✅ OK"
+    else
+        echo "❌ Failed"
+        ((errors++))
+    fi
+    
+    # Test Python imports
+    echo -n "  Python dependencies: "
+    if sudo docker exec geogpt-rag-system python -c "import openai, litellm, pydantic_settings, dotenv; print('OK')" 2>/dev/null | grep -q "OK"; then
+        echo "✅ OK"
+    else
+        echo "❌ Failed"
+        ((errors++))
+    fi
+    
+    # Test OpenAI API key
+    echo -n "  OpenAI API key: "
+    if [[ -n "$OPENAI_API_KEY" && "$OPENAI_API_KEY" != "YOUR_OPENAI_API_KEY_HERE" ]]; then
+        echo "✅ OK (${#OPENAI_API_KEY} chars)"
+    else
+        echo "❌ Not set or placeholder"
+        ((errors++))
+    fi
+    
+    return $errors
+}
+
+if validate_system; then
+    echo "✅ All components validated successfully"
+    
+    # Run system tests
 echo "🧪 Running system tests..."
-if sudo docker exec geogpt-rag-system python /app/scripts/test_system.py; then
+if sudo docker exec -e EC2_INSTANCE_IP="localhost" -e OPENAI_API_KEY="$OPENAI_API_KEY" -e LLM_PROVIDER="auto" -e LLM_MODEL="gpt-4.1-nano-2025-04-14" -e POSTGRES_PASSWORD="geogpt_password" geogpt-rag-system python /app/scripts/test_system.py; then
     echo "✅ System tests passed!"
     TEST_STATUS=0
 else
     echo "❌ System tests failed!"
+    TEST_STATUS=1
+fi
+else
+    echo "❌ Component validation failed - skipping system tests"
+    echo "🔧 Check the issues above and run troubleshooting commands"
     TEST_STATUS=1
 fi
 
@@ -460,6 +573,75 @@ MONITOR_EOF
 
 chmod +x ~/monitor_geogpt.sh
 
+# Create inline troubleshooting function
+create_troubleshooting_guide() {
+    echo "Creating troubleshooting guide..."
+    cat > "$PROJECT_DIR/TROUBLESHOOTING.md" << EOF
+# GeoGPT-RAG Troubleshooting Guide
+
+## Quick Health Check Commands
+\`\`\`bash
+# Check all services
+curl http://localhost:8812/health
+
+# Check individual services
+curl http://localhost:8810/health  # Embedding
+curl http://localhost:8811/health  # Reranking
+curl http://localhost:8812/health  # Main API
+
+# Check containers
+docker-compose ps
+
+# Check logs
+docker-compose logs geogpt-rag | tail -20
+\`\`\`
+
+## Common Issues & Fixes
+
+### 1. LLM Provider Offline
+\`\`\`bash
+# Check API key
+echo \$OPENAI_API_KEY | cut -c1-10
+# Set API key if missing
+export OPENAI_API_KEY="sk-proj-your-key-here"
+sed -i 's/YOUR_OPENAI_API_KEY_HERE/sk-proj-your-key-here/' .env
+docker-compose restart geogpt-rag
+\`\`\`
+
+### 2. Missing Dependencies
+\`\`\`bash
+# Install missing packages
+docker-compose exec geogpt-rag pip install --break-system-packages openai litellm
+docker-compose restart geogpt-rag
+\`\`\`
+
+### 3. Service Won't Start
+\`\`\`bash
+# Full restart
+docker-compose down
+docker-compose up -d
+# Wait 2 minutes, then check health
+curl http://localhost:8812/health
+\`\`\`
+
+### 4. GPU Issues
+\`\`\`bash
+# Check NVIDIA
+nvidia-smi
+# Restart Docker with GPU support
+sudo systemctl restart docker
+docker-compose restart
+\`\`\`
+
+### 5. Complete Reset
+\`\`\`bash
+# Use cleanup script for complete reset
+./scripts/cleanup_redeploy.sh
+\`\`\`
+EOF
+}
+create_troubleshooting_guide
+
 # Display final status
 echo ""
 echo "=== EC2 Initial Setup Summary ==="
@@ -467,6 +649,37 @@ echo "🏠 Project Directory: $PROJECT_DIR"
 echo "🌐 Detected Public IP: $PUBLIC_IP"
 echo "📊 Monitor System: ~/monitor_geogpt.sh"
 echo "🔄 Full Deployment: cd $PROJECT_DIR && ./scripts/cleanup_redeploy.sh"
+echo ""
+
+# Final setup instructions
+echo "=== Next Steps ==="
+if [ "$OPENAI_API_KEY" = "YOUR_OPENAI_API_KEY_HERE" ]; then
+    echo "🔑 IMPORTANT: Set your OpenAI API key to enable LLM functionality:"
+    echo "   export OPENAI_API_KEY='sk-proj-your-actual-key-here'"
+    echo "   sed -i 's/YOUR_OPENAI_API_KEY_HERE/sk-proj-your-actual-key-here/' $PROJECT_DIR/.env"
+    echo "   docker-compose restart geogpt-rag"
+    echo ""
+    echo "📖 See detailed instructions: $PROJECT_DIR/SET_API_KEY.md"
+else
+    echo "✅ OpenAI API key configured"
+    echo "🧪 Test the system: curl http://localhost:8812/health"
+fi
+
+echo ""
+echo "=== Troubleshooting ==="
+echo "📋 If services don't start properly:"
+echo "   1. Check health: curl http://localhost:8812/health"
+echo "   2. Check logs: docker-compose logs geogpt-rag | tail -20"
+echo "   3. Restart services: docker-compose restart"
+echo "   4. Full rebuild: docker-compose down && docker-compose up --build"
+echo ""
+echo "🔧 Common fixes:"
+echo "   - LLM offline: Check OpenAI API key in .env and restart"
+echo "   - Import errors: Dependencies now installed in Docker image"
+echo "   - GPU issues: Check nvidia-smi and restart Docker"
+echo "   - Complete reset: ./scripts/cleanup_redeploy.sh"
+echo ""
+echo "📖 Detailed troubleshooting: see TROUBLESHOOTING.md"
 echo ""
 echo "🌐 Service URLs:"
 echo "  - Embedding Service: http://$PUBLIC_IP:8810"

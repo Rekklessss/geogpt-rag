@@ -360,15 +360,15 @@ async def start_deep_discovery(request: DeepDiscoveryRequest, background_tasks: 
     
     # Initialize discovery state
     steps = [
-        {"id": 1, "name": "Query Analysis & Planning", "status": "pending", "progress": 0},
-        {"id": 2, "name": "Knowledge Base Search", "status": "pending", "progress": 0},
-        {"id": 3, "name": "Web Intelligence Gathering", "status": "pending", "progress": 0},
-        {"id": 4, "name": "Cross-Reference Analysis", "status": "pending", "progress": 0},
-        {"id": 5, "name": "Synthesis & Report Generation", "status": "pending", "progress": 0}
+        DeepDiscoveryStep(id=1, name="Query Analysis & Planning", status="pending", progress=0),
+        DeepDiscoveryStep(id=2, name="Knowledge Base Search", status="pending", progress=0),
+        DeepDiscoveryStep(id=3, name="Web Intelligence Gathering", status="pending", progress=0),
+        DeepDiscoveryStep(id=4, name="Cross-Reference Analysis", status="pending", progress=0),
+        DeepDiscoveryStep(id=5, name="Synthesis & Report Generation", status="pending", progress=0)
     ]
     
     discovery_state = {
-        "id": discovery_id,
+        "discovery_id": discovery_id,
         "query": request.query,
         "status": "running",
         "progress": 0.0,
@@ -387,7 +387,15 @@ async def start_deep_discovery(request: DeepDiscoveryRequest, background_tasks: 
     # Start background discovery process
     background_tasks.add_task(run_discovery_process, discovery_id)
     
-    return DeepDiscoveryResponse(**{k: v for k, v in discovery_state.items() if k != 'start_time'})
+    return DeepDiscoveryResponse(
+        discovery_id=discovery_id,
+        status="running",
+        progress=0.0,
+        current_step=1,
+        steps=discovery_state["steps"],
+        sources=[],
+        final_report=None
+    )
 
 @app.get("/discovery/{discovery_id}")
 async def get_discovery_status(discovery_id: str):

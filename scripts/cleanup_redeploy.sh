@@ -10,10 +10,10 @@ REPO_URL="https://github.com/Rekklessss/geogpt-rag.git"
 
 # Configuration - Update this IP address when your EC2 instance restarts
 # You can also set this via environment variable: export GEOGPT_PUBLIC_IP="your.new.ip"
-GEOGPT_PUBLIC_IP="${GEOGPT_PUBLIC_IP:-3.236.251.69}"
+GEOGPT_PUBLIC_IP="${GEOGPT_PUBLIC_IP:-54.224.133.45}"
 
 # Production configuration
-PRODUCTION_EC2_IP="3.236.251.69"
+PRODUCTION_EC2_IP="54.224.133.45"
 PRODUCTION_EC2_ID="i-0cf221c2fca3cb3cf"
 ZILLIZ_CLOUD_URI="https://in03-088dd53cf6b3582.serverless.gcp-us-west1.cloud.zilliz.com"
 ZILLIZ_CLOUD_TOKEN="affa13223a768e6e16b4e2bebf1e3f95b7b9085814d1407470c10922c7469d459cf523c189e99e24a20a1146976edd1a808d34fc"
@@ -120,7 +120,6 @@ export EC2_INSTANCE_IP="$GEOGPT_PUBLIC_IP"
 export EC2_INSTANCE_ID="$PRODUCTION_EC2_ID"
 export LLM_PROVIDER="${LLM_PROVIDER:-auto}"
 export LLM_MODEL="${LLM_MODEL:-gpt-4o-mini}"
-export OPENAI_MAX_TOKENS="${OPENAI_MAX_TOKENS:-2048}"
 export CONTEXT_WINDOW_SIZE="${CONTEXT_WINDOW_SIZE:-8192}"
 export MAX_CONVERSATION_HISTORY="${MAX_CONVERSATION_HISTORY:-50}"
 export ZILLIZ_CLOUD_URI="$ZILLIZ_CLOUD_URI"
@@ -141,7 +140,6 @@ EC2_REGION=us-east-1
 LLM_PROVIDER=auto
 LLM_MODEL=gpt-4o-mini
 OPENAI_API_KEY=your-openai-api-key-here
-OPENAI_MAX_TOKENS=2048
 
 # Vector Database
 ZILLIZ_CLOUD_URI=$ZILLIZ_CLOUD_URI
@@ -168,7 +166,6 @@ echo "   EC2 Instance IP: $EC2_INSTANCE_IP"
 echo "   LLM Provider: $LLM_PROVIDER"
 echo "   LLM Model: $LLM_MODEL"
 echo "   OpenAI API Key: ✓ Set (${#OPENAI_API_KEY} characters)"
-echo "   Max Tokens: $OPENAI_MAX_TOKENS"
 
 # Stop all services
 echo "⏹️  Stopping all services..."
@@ -273,6 +270,64 @@ done
 echo "⏳ Waiting for services to initialize with downloaded models..."
 sleep 60
 
+# Verify and install missing dependencies in container
+echo "🔍 Verifying all required dependencies are available..."
+DEPS_CHECK=$(sudo docker-compose exec -T geogpt-rag python -c "
+try:
+    import openai, litellm, pydantic_settings, dotenv, langchain_milvus
+    print('ALL_DEPS_OK')
+except ImportError as e:
+    print(f'MISSING_DEPS: {e}')
+" 2>/dev/null || echo "CONTAINER_ERROR")
+
+if [[ "$DEPS_CHECK" == "ALL_DEPS_OK" ]]; then
+    echo "✅ All required dependencies are available"
+elif [[ "$DEPS_CHECK" == "CONTAINER_ERROR" ]]; then
+    echo "⚠️ Cannot check dependencies - container may not be ready"
+    echo "Waiting additional time for container to start..."
+    sleep 30
+else
+    echo "❌ Missing dependencies detected: $DEPS_CHECK"
+    echo "🔧 Installing missing dependencies..."
+    
+    if sudo docker-compose exec -T geogpt-rag pip install --break-system-packages \
+        openai>=1.97.0 \
+        litellm>=1.74.0 \
+        pydantic-settings>=2.10.0 \
+        python-dotenv>=1.1.0 \
+        langchain-community>=0.3.0 \
+        langchain-milvus>=0.1.0; then
+        echo "✅ Dependencies installed successfully"
+        echo "🔄 Restarting services to load new dependencies..."
+        sudo docker-compose restart geogpt-rag
+        sleep 30
+    else
+        echo "❌ Failed to install dependencies"
+    fi
+fi
+
+# Verify environment variables are properly set in container
+echo "🔍 Verifying environment variables in container..."
+ENV_CHECK=$(sudo docker-compose exec -T geogpt-rag bash -c "
+if [[ -n \"\$OPENAI_API_KEY\" && \"\$OPENAI_API_KEY\" != \"YOUR_OPENAI_API_KEY_HERE\" ]]; then
+    echo 'ENV_OK'
+else
+    echo 'ENV_MISSING'
+fi
+" 2>/dev/null || echo "ENV_ERROR")
+
+if [[ "$ENV_CHECK" != "ENV_OK" ]]; then
+    echo "⚠️ Environment variables not properly set in container"
+    echo "🔧 Setting environment variables in container..."
+    sudo docker-compose exec -T geogpt-rag bash -c "
+        export OPENAI_API_KEY='$OPENAI_API_KEY'
+        export LLM_PROVIDER='$LLM_PROVIDER'
+        export LLM_MODEL='$LLM_MODEL'
+        export EC2_INSTANCE_IP='$EC2_INSTANCE_IP'
+        echo 'Environment variables set for current session'
+    "
+fi
+
 # Check service health
 echo "🏥 Checking service health..."
 check_service() {
@@ -344,8 +399,81 @@ else
     LLM_STATUS=1
 fi
 
+# Comprehensive system validation before running tests
+echo "🧪 Running comprehensive system validation..."
+
+validate_deployment() {
+    local errors=0
+    
+    echo "🔧 Validating deployment components..."
+    
+    # Test container is running
+    echo -n "  Container status: "
+    if sudo docker ps | grep -q "geogpt-rag-system.*Up"; then
+        echo "✅ Running"
+    else
+        echo "❌ Not running"
+        ((errors++))
+    fi
+    
+    # Test database connections
+    echo -n "  Database connectivity: "
+    if sudo docker exec geogpt-rag-system python -c "import psycopg2; conn=psycopg2.connect('postgresql://geogpt:geogpt_password@postgres:5432/geogpt_spatial'); conn.close(); print('OK')" 2>/dev/null | grep -q "OK"; then
+        echo "✅ OK"
+    else
+        echo "❌ Failed"
+        ((errors++))
+    fi
+    
+    # Test Redis connection
+    echo -n "  Redis connectivity: "
+    if sudo docker exec geogpt-redis redis-cli ping 2>/dev/null | grep -q "PONG"; then
+        echo "✅ OK"
+    else
+        echo "❌ Failed"
+        ((errors++))
+    fi
+    
+    # Test Python dependencies
+    echo -n "  Python dependencies: "
+    if sudo docker exec geogpt-rag-system python -c "import openai, litellm, pydantic_settings, dotenv, langchain_milvus; print('OK')" 2>/dev/null | grep -q "OK"; then
+        echo "✅ All required packages available"
+    else
+        echo "❌ Missing packages"
+        ((errors++))
+    fi
+    
+    # Test environment variables in container
+    echo -n "  Environment variables: "
+    ENV_TEST=$(sudo docker exec geogpt-rag-system bash -c "
+        if [[ -n \"\$OPENAI_API_KEY\" && \"\$OPENAI_API_KEY\" != \"YOUR_OPENAI_API_KEY_HERE\" && -n \"\$EC2_INSTANCE_IP\" ]]; then
+            echo 'OK'
+        else
+            echo 'MISSING'
+        fi
+    " 2>/dev/null)
+    
+    if [[ "$ENV_TEST" == "OK" ]]; then
+        echo "✅ Set correctly"
+    else
+        echo "❌ Missing or incorrect"
+        ((errors++))
+    fi
+    
+    # Test API endpoints are responding
+    echo -n "  API endpoints: "
+    if curl -s http://localhost:8812/health >/dev/null 2>&1; then
+        echo "✅ Responding"
+    else
+        echo "❌ Not responding"
+        ((errors++))
+    fi
+    
+    return $errors
+}
+
 # Set environment variables for tests inside container
-echo "🧪 Setting up test environment in container..."
+echo "🔧 Setting up test environment in container..."
 sudo docker exec geogpt-rag-system bash -c "
 export EC2_INSTANCE_IP='$EC2_INSTANCE_IP'
 export OPENAI_API_KEY='$OPENAI_API_KEY'
@@ -353,9 +481,17 @@ export LLM_PROVIDER='$LLM_PROVIDER'
 export LLM_MODEL='$LLM_MODEL'
 "
 
+# Run validation
+if validate_deployment; then
+    echo "✅ Deployment validation passed - running tests..."
+else
+    echo "⚠️ Deployment validation found issues - tests may fail"
+    echo "🔧 Check logs: docker-compose logs geogpt-rag | tail -20"
+fi
+
 # Run system tests
 echo "🧪 Running updated system tests..."
-if sudo docker exec -e EC2_INSTANCE_IP="$EC2_INSTANCE_IP" -e OPENAI_API_KEY="$OPENAI_API_KEY" -e LLM_PROVIDER="$LLM_PROVIDER" -e LLM_MODEL="$LLM_MODEL" geogpt-rag-system python /app/scripts/test_system.py; then
+if sudo docker exec -e EC2_INSTANCE_IP="localhost" -e OPENAI_API_KEY="$OPENAI_API_KEY" -e LLM_PROVIDER="$LLM_PROVIDER" -e LLM_MODEL="$LLM_MODEL" -e POSTGRES_PASSWORD="geogpt_password" geogpt-rag-system python /app/scripts/test_system.py; then
     echo "✅ System tests passed!"
     TEST_STATUS=0
 else
@@ -365,7 +501,7 @@ fi
 
 # Run comprehensive GeoGPT API tests
 echo "🚀 Running comprehensive GeoGPT API tests with environment variables..."
-if sudo docker exec -e EC2_INSTANCE_IP="$EC2_INSTANCE_IP" -e OPENAI_API_KEY="$OPENAI_API_KEY" -e LLM_PROVIDER="$LLM_PROVIDER" -e LLM_MODEL="$LLM_MODEL" geogpt-rag-system python /app/scripts/test_geogpt_api.py; then
+if sudo docker exec -e EC2_INSTANCE_IP="localhost" -e OPENAI_API_KEY="$OPENAI_API_KEY" -e LLM_PROVIDER="$LLM_PROVIDER" -e LLM_MODEL="$LLM_MODEL" -e POSTGRES_PASSWORD="geogpt_password" geogpt-rag-system python /app/scripts/test_geogpt_api.py; then
     echo "✅ GeoGPT API tests passed!"
     GEOGPT_TEST_STATUS=0
 else
@@ -455,18 +591,25 @@ else
 fi
 
 echo ""
+echo "=== Troubleshooting ==="
 echo "🔍 To view real-time logs:"
 echo "   sudo docker-compose logs -f"
 echo ""
-echo "📊 To monitor system status:"
-echo "   sudo docker ps && curl -s http://localhost:8812/health"
+echo "📊 Quick health check:"
+echo "   curl http://localhost:8812/health"
 echo ""
-echo "🔄 To redeploy with a different IP address:"
+echo "🔧 Common fixes:"
+echo "   - LLM offline: Check OpenAI API key and restart container"
+echo "   - Import errors: Dependencies should be in Docker image now"
+echo "   - Service down: docker-compose restart geogpt-rag"
+echo "   - Complete reset: ./scripts/cleanup_redeploy.sh"
+echo ""
+echo "🧪 Manual testing:"
+echo "   export OPENAI_API_KEY='your-key' && python3 scripts/test_system.py"
+echo ""
+echo "🔄 Redeploy with different IP:"
 echo "   ./scripts/cleanup_redeploy.sh --ip YOUR_NEW_IP"
 echo "   OR: export GEOGPT_PUBLIC_IP='YOUR_NEW_IP' && ./scripts/cleanup_redeploy.sh"
-echo ""
-echo "🧪 To run tests manually:"
-echo "   export OPENAI_API_KEY='your-key' && python3 scripts/test_system.py"
 echo ""
 echo "🐳 Docker containers:"
 sudo docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 

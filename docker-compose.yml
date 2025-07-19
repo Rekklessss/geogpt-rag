@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   geogpt-rag:
     build:
@@ -19,12 +17,11 @@ services:
       - POSTGRES_PASSWORD=geogpt_password
       - REDIS_URL=redis://redis:6379
       # Dynamic configuration - Production values
-      - EC2_INSTANCE_IP=${EC2_INSTANCE_IP:-3.236.251.69}
+      - EC2_INSTANCE_IP=${EC2_INSTANCE_IP:-54.224.133.45}
       - EC2_INSTANCE_ID=${EC2_INSTANCE_ID:-i-0cf221c2fca3cb3cf}
       - LLM_PROVIDER=${LLM_PROVIDER:-auto}
       - LLM_MODEL=${LLM_MODEL:-gpt-4.1-nano-2025-04-14}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MAX_TOKENS=${OPENAI_MAX_TOKENS:-2048}
       - CONTEXT_WINDOW_SIZE=${CONTEXT_WINDOW_SIZE:-8192}
       - MAX_CONVERSATION_HISTORY=${MAX_CONVERSATION_HISTORY:-50}
       # Zilliz Cloud Configuration

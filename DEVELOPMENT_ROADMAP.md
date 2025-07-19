@@ -62,7 +62,7 @@
 - **Enhanced `docker-compose.yml`** - PostgreSQL + Redis integration
 
 #### **🔧 Configuration System**
-- ✅ Production credentials configured (EC2: 3.236.251.69, OpenAI API, Zilliz Cloud)
+- ✅ Production credentials configured (EC2: 54.224.133.45, OpenAI API, Zilliz Cloud)
 - ✅ Environment-based IP configuration (replaces hardcoded 3.81.101.190)
 - ✅ LLM provider switching (OpenAI ↔ Sagemaker)
 - ✅ Dynamic service endpoint management

@@ -1,5 +1,6 @@
 langchain==0.1.0
-langchain-community==0.0.10
+langchain-community>=0.3.27
+langchain-milvus>=0.2.1
 pydantic==2.5.2
 requests==2.31.0
 pymilvus==2.3.4
@@ -15,9 +16,11 @@ duckduckgo-search==8.1.1
 beautifulsoup4==4.12.3
 wikipedia==1.4.0
 tiktoken==0.5.0
-# New LLM provider dependencies
-litellm==1.73.0
-openai==1.97.0
+# New LLM provider dependencies (Updated versions for compatibility)
+litellm>=1.74.0
+openai>=1.97.0
+pydantic-settings>=2.10.0
+python-dotenv>=1.1.0
 # Database and caching dependencies
 psycopg2-binary==2.9.0
 redis==6.2.0
@@ -26,5 +29,3 @@ alembic==1.16.0
 # Map visualization dependencies
 folium==0.20.0
 geopandas==1.1.1
-# Memory and conversation dependencies
-python-dotenv==1.1.1
