@@ -26,23 +26,7 @@ from duckduckgo_search import DDGS
 from geo_kb import KBDocQA, llm_generate
 from config import RAG_PROMPT
 
-# Import new systems
-try:
-    from .llm_providers import get_llm_manager
-    from .instance_config import get_config_manager
-    llm_manager = get_llm_manager()
-    config_manager = get_config_manager()
-    logger.info("New LLM provider and configuration systems loaded successfully")
-except ImportError as e:
-    logger.warning(f"New systems not available, using legacy implementation: {e}")
-    llm_manager = None
-    config_manager = None
-except Exception as e:
-    logger.error(f"Failed to load new systems: {e}")
-    llm_manager = None
-    config_manager = None
-
-# Configure logging
+# Configure logging FIRST
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -52,6 +36,36 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Import new systems
+try:
+    # Try relative imports first
+    from .llm_providers import get_llm_manager
+    from .instance_config import get_config_manager
+except ImportError:
+    # Fall back to absolute imports
+    try:
+        from llm_providers import get_llm_manager
+        from instance_config import get_config_manager
+    except ImportError as e:
+        logger.warning(f"New systems not available, using legacy implementation: {e}")
+        get_llm_manager = None
+        get_config_manager = None
+
+# Initialize managers if available
+try:
+    if get_llm_manager and get_config_manager:
+        llm_manager = get_llm_manager()
+        config_manager = get_config_manager()
+        logger.info("New LLM provider and configuration systems loaded successfully")
+    else:
+        llm_manager = None
+        config_manager = None
+        logger.info("Using legacy implementation")
+except Exception as e:
+    logger.error(f"Failed to load new systems: {e}")
+    llm_manager = None
+    config_manager = None
 
 app = FastAPI(title="GeoGPT API", version="1.0.0", description="Complete GeoGPT RAG System API")
 
