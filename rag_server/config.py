@@ -1,5 +1,24 @@
 # Import dynamic configuration management
-from .instance_config import get_instance_config
+try:
+    # Try relative import first (when used as package)
+    from .instance_config import get_instance_config
+except ImportError:
+    # Fall back to absolute import (when run directly)
+    try:
+        from instance_config import get_instance_config
+    except ImportError:
+        # Fallback to manual configuration if instance_config not available
+        import os
+        
+        class FallbackConfig:
+            def __init__(self):
+                self.ec2_instance_ip = os.getenv("EC2_INSTANCE_IP", "localhost")
+                self.embedding_url = f"http://{self.ec2_instance_ip}:8810"
+                self.reranking_url = f"http://{self.ec2_instance_ip}:8811"
+                self.api_base_url = f"http://{self.ec2_instance_ip}:8812"
+        
+        def get_instance_config():
+            return FallbackConfig()
 
 # Get current instance configuration
 _config = get_instance_config()

@@ -49,7 +49,10 @@ def llm_generate(prompt):
     """
     try:
         # Import the new LLM provider system
-        from .llm_providers import get_llm_manager
+        try:
+            from .llm_providers import get_llm_manager
+        except ImportError:
+            from llm_providers import get_llm_manager
         
         # Get the manager instance
         manager = get_llm_manager()
