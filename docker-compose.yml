@@ -16,6 +16,7 @@ services:
       # Database configuration
       - DATABASE_URL=postgresql://geogpt:geogpt_password@postgres:5432/geogpt_spatial
       - POSTGRES_URL=postgresql://geogpt:geogpt_password@postgres:5432/geogpt_spatial
+      - POSTGRES_PASSWORD=geogpt_password
       - REDIS_URL=redis://redis:6379
       # Dynamic configuration - Production values
       - EC2_INSTANCE_IP=${EC2_INSTANCE_IP:-3.236.251.69}

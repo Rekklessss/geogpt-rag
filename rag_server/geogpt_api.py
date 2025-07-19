@@ -145,17 +145,7 @@ class CodeExecutionResponse(BaseModel):
 active_discoveries = {}
 active_executions = {}
 
-# Import new systems
-try:
-    from .llm_providers import get_llm_manager
-    from .instance_config import get_config_manager
-    llm_manager = get_llm_manager()
-    config_manager = get_config_manager()
-    logger.info("New LLM provider and configuration systems loaded successfully")
-except Exception as e:
-    logger.error(f"Failed to load new systems: {e}")
-    llm_manager = None
-    config_manager = None
+# LLM manager should already be initialized from earlier import section
 
 @app.get("/health")
 async def health_check():
