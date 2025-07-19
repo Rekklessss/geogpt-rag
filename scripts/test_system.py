@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Test script for GeoGPT-RAG system
+Updated Test Script for GeoGPT-RAG System
 Tests the embedding service, reranking service, and RAG pipeline
+Updated for environment variable configuration and new LLM providers
 """
 
 import requests
@@ -9,19 +10,34 @@ import json
 import time
 import sys
 import os
+from pathlib import Path
 
 # Add the rag_server directory to the path
-sys.path.append('/app/rag_server')
+current_dir = Path(__file__).parent.parent
+sys.path.append(str(current_dir / "rag_server"))
 
-from geo_kb import KBDocQA
+# Environment-based configuration
+def get_service_urls():
+    """Get service URLs from environment variables or defaults"""
+    ec2_ip = os.getenv("EC2_INSTANCE_IP", "localhost")
+    embedding_port = os.getenv("EMBEDDING_PORT", "8810")
+    reranking_port = os.getenv("RERANKING_PORT", "8811")
+    main_api_port = os.getenv("MAIN_API_PORT", "8812")
+    
+    return {
+        "embedding": f"http://{ec2_ip}:{embedding_port}",
+        "reranking": f"http://{ec2_ip}:{reranking_port}",
+        "main_api": f"http://{ec2_ip}:{main_api_port}"
+    }
 
 def test_embedding_service():
     """Test the embedding service"""
     print("Testing Embedding Service...")
+    urls = get_service_urls()
     
     try:
         # Test health endpoint
-        health_response = requests.get("http://localhost:8810/health")
+        health_response = requests.get(f"{urls['embedding']}/health", timeout=10)
         print(f"Health check: {health_response.status_code} - {health_response.json()}")
         
         # Test embedding endpoint
@@ -30,7 +46,7 @@ def test_embedding_service():
             "instruction": "Given a web search query, retrieve relevant passages that answer the query"
         }
         
-        response = requests.post("http://localhost:8810/query", json=test_data)
+        response = requests.post(f"{urls['embedding']}/query", json=test_data, timeout=30)
         if response.status_code == 200:
             result = response.json()
             embeddings = json.loads(result["q_embeddings"])
@@ -39,6 +55,7 @@ def test_embedding_service():
             return True
         else:
             print(f"✗ Embedding service failed: {response.status_code}")
+            print(f"  Response: {response.text}")
             return False
             
     except Exception as e:
@@ -48,10 +65,11 @@ def test_embedding_service():
 def test_reranking_service():
     """Test the reranking service"""
     print("\nTesting Reranking Service...")
+    urls = get_service_urls()
     
     try:
         # Test health endpoint
-        health_response = requests.get("http://localhost:8811/health")
+        health_response = requests.get(f"{urls['reranking']}/health", timeout=10)
         print(f"Health check: {health_response.status_code} - {health_response.json()}")
         
         # Test reranking endpoint
@@ -62,7 +80,7 @@ def test_reranking_service():
             ]
         }
         
-        response = requests.post("http://localhost:8811/query", json=test_data)
+        response = requests.post(f"{urls['reranking']}/query", json=test_data, timeout=30)
         if response.status_code == 200:
             result = response.json()
             scores = json.loads(result["pred_scores"])
@@ -71,6 +89,7 @@ def test_reranking_service():
             return True
         else:
             print(f"✗ Reranking service failed: {response.status_code}")
+            print(f"  Response: {response.text}")
             return False
             
     except Exception as e:
@@ -82,34 +101,151 @@ def test_rag_pipeline():
     print("\nTesting RAG Pipeline...")
     
     try:
+        # Test import and initialization
+        try:
+            from geo_kb import KBDocQA
+        except ImportError:
+            print("✗ Failed to import KBDocQA - checking alternative paths")
+            # Try alternative import paths
+            try:
+                sys.path.append('/app')
+                from rag_server.geo_kb import KBDocQA
+            except ImportError:
+                print("✗ Could not import KBDocQA from any path")
+                return False
+        
         # Initialize the RAG system
         kb_server = KBDocQA()
         
         # Test vector database connection
         print("Testing vector database connection...")
         
-        # Since we don't have documents loaded, we'll test the connection
-        # by attempting to perform a search (it should return empty results)
-        docs = kb_server.retrieval("test query", k=1)
+        # Test retrieval with a simple query
+        docs = kb_server.retrieval("test query about geospatial analysis", k=1)
         print(f"✓ Vector database connection OK - Retrieved {len(docs)} documents")
         
-        # Test LLM generation (this will use the Sagemaker endpoint)
+        # Test LLM generation with new provider system
         print("Testing LLM generation...")
-        from geo_kb import llm_generate
-        
-        test_prompt = "What is geospatial analysis?"
-        response = llm_generate(test_prompt)
-        
-        if response:
-            print(f"✓ LLM generation OK - Response length: {len(response)} characters")
-            print(f"  Sample response: {response[:200]}...")
-            return True
-        else:
-            print("✗ LLM generation failed - Empty response")
-            return False
+        try:
+            # Try to import new LLM system
+            from llm_providers import get_llm_manager
+            llm_manager = get_llm_manager()
+            
+            # Test with new LLM manager
+            test_prompt = "What is geospatial analysis? Provide a brief explanation."
+            response = llm_manager.generate(test_prompt, max_tokens=100)
+            
+            if response and len(response.strip()) > 10:
+                print(f"✓ New LLM provider OK - Response length: {len(response)} characters")
+                print(f"  Sample response: {response[:200]}...")
+                print(f"  LLM Provider: {llm_manager.get_active_provider()}")
+                return True
+            else:
+                print("✗ New LLM provider failed - Empty or too short response")
+                return False
+                
+        except ImportError:
+            # Fallback to old system
+            print("New LLM system not available, testing legacy system...")
+            try:
+                from geo_kb import llm_generate
+                test_prompt = "What is geospatial analysis?"
+                response = llm_generate(test_prompt)
+                
+                if response and len(response.strip()) > 10:
+                    print(f"✓ Legacy LLM generation OK - Response length: {len(response)} characters")
+                    print(f"  Sample response: {response[:200]}...")
+                    return True
+                else:
+                    print("✗ Legacy LLM generation failed - Empty response")
+                    return False
+            except Exception as e:
+                print(f"✗ Legacy LLM generation error: {e}")
+                return False
             
     except Exception as e:
         print(f"✗ RAG pipeline error: {e}")
+        return False
+
+def test_environment_configuration():
+    """Test environment variable configuration"""
+    print("\nTesting Environment Configuration...")
+    
+    try:
+        # Test instance config management
+        try:
+            from instance_config import get_config_manager
+            config_manager = get_config_manager()
+            
+            print("✓ Instance configuration loaded")
+            print(f"  EC2 Instance IP: {config_manager.config.ec2_instance_ip}")
+            print(f"  Embedding URL: {config_manager.config.embedding_url}")
+            print(f"  Reranking URL: {config_manager.config.reranking_url}")
+            print(f"  Main API URL: {config_manager.config.api_base_url}")
+            
+            # Test service health check
+            health_status = config_manager.health_check()
+            print(f"  Service Health: {health_status}")
+            
+            return True
+            
+        except ImportError:
+            print("⚠️  New instance config system not available")
+            # Check basic environment variables
+            ec2_ip = os.getenv("EC2_INSTANCE_IP", "not_set")
+            openai_key = os.getenv("OPENAI_API_KEY", "not_set")
+            
+            print(f"  EC2_INSTANCE_IP: {'✓ Set' if ec2_ip != 'not_set' else '✗ Not set'}")
+            print(f"  OPENAI_API_KEY: {'✓ Set' if openai_key != 'not_set' else '✗ Not set'}")
+            
+            return ec2_ip != "not_set"
+            
+    except Exception as e:
+        print(f"✗ Environment configuration error: {e}")
+        return False
+
+def test_main_api_service():
+    """Test the main API service"""
+    print("\nTesting Main API Service...")
+    urls = get_service_urls()
+    
+    try:
+        # Test health endpoint
+        health_response = requests.get(f"{urls['main_api']}/health", timeout=10)
+        
+        if health_response.status_code == 200:
+            health_data = health_response.json()
+            print(f"✓ Main API service OK - Status: {health_data.get('status')}")
+            print(f"  Services: {health_data.get('services', {})}")
+            
+            # Test chat endpoint (basic functionality)
+            chat_payload = {
+                "message": "What is GIS?",
+                "include_thinking": False,
+                "include_sources": False,
+                "use_web_search": False,
+                "max_context_length": 1000
+            }
+            
+            chat_response = requests.post(f"{urls['main_api']}/chat", json=chat_payload, timeout=60)
+            
+            if chat_response.status_code == 200:
+                chat_data = chat_response.json()
+                response_text = chat_data.get('response', '')
+                print(f"✓ Chat endpoint OK - Response length: {len(response_text)} characters")
+                print(f"  Processing time: {chat_data.get('processing_time', 0):.2f}s")
+                return True
+            else:
+                print(f"✗ Chat endpoint failed: {chat_response.status_code}")
+                return False
+                
+        else:
+            print(f"✗ Main API service failed: {health_response.status_code}")
+            print(f"  Response: {health_response.text}")
+            return False
+            
+    except Exception as e:
+        print(f"✗ Main API service error: {e}")
         return False
 
 def test_document_ingestion():
@@ -141,15 +277,19 @@ def test_document_ingestion():
         """
         
         # Save sample document
-        os.makedirs("/app/data", exist_ok=True)
-        with open("/app/data/sample_geo_doc.mmd", "w") as f:
+        data_dir = Path("/app/data") if Path("/app/data").exists() else Path("./data")
+        data_dir.mkdir(exist_ok=True)
+        
+        sample_file = data_dir / "sample_geo_doc.md"
+        with open(sample_file, "w") as f:
             f.write(sample_doc)
         
         # Initialize RAG system
+        from geo_kb import KBDocQA
         kb_server = KBDocQA()
         
         # Add the document
-        kb_server.add_file("/app/data/sample_geo_doc.mmd", max_size=512)
+        kb_server.add_file(str(sample_file), max_size=512)
         print("✓ Document ingestion OK - Sample document added")
         
         # Test retrieval
@@ -169,35 +309,67 @@ def test_document_ingestion():
 
 def main():
     """Run all tests"""
-    print("=== GeoGPT-RAG System Tests ===")
+    print("=== GeoGPT-RAG System Tests (Updated for Current Workflow) ===")
     print("Testing system components...\n")
+    
+    # Print current configuration
+    urls = get_service_urls()
+    print("🔧 Current Configuration:")
+    print(f"  Embedding Service: {urls['embedding']}")
+    print(f"  Reranking Service: {urls['reranking']}")
+    print(f"  Main API Service: {urls['main_api']}")
+    print(f"  OpenAI API Key: {'✓ Set' if os.getenv('OPENAI_API_KEY') else '✗ Not set'}")
+    print()
     
     # Wait for services to be ready
     print("Waiting for services to start...")
     time.sleep(10)
     
     tests = [
-        test_embedding_service,
-        test_reranking_service,
-        test_rag_pipeline,
-        test_document_ingestion
+        ("Environment Configuration", test_environment_configuration),
+        ("Embedding Service", test_embedding_service),
+        ("Reranking Service", test_reranking_service),
+        ("Main API Service", test_main_api_service),
+        ("RAG Pipeline", test_rag_pipeline),
+        ("Document Ingestion", test_document_ingestion)
     ]
     
     passed = 0
     total = len(tests)
+    results = {}
     
-    for test in tests:
-        if test():
-            passed += 1
+    for test_name, test_func in tests:
+        print(f"\n{'='*60}")
+        print(f"Running: {test_name}")
+        print('='*60)
+        
+        try:
+            result = test_func()
+            results[test_name] = result
+            if result:
+                passed += 1
+                print(f"✅ {test_name}: PASSED")
+            else:
+                print(f"❌ {test_name}: FAILED")
+        except Exception as e:
+            print(f"❌ {test_name}: ERROR - {e}")
+            results[test_name] = False
     
-    print(f"\n=== Test Results ===")
-    print(f"Passed: {passed}/{total}")
+    print(f"\n{'='*60}")
+    print("📊 TEST SUMMARY")
+    print('='*60)
+    
+    for test_name, result in results.items():
+        status = "✅ PASSED" if result else "❌ FAILED"
+        print(f"  {test_name:<30} {status}")
+    
+    print(f"\n🏆 Overall Score: {passed}/{total} tests passed ({passed/total*100:.1f}%)")
     
     if passed == total:
-        print("✓ All tests passed! GeoGPT-RAG system is working correctly.")
+        print("🎉 All tests passed! GeoGPT-RAG system is working correctly.")
         return 0
     else:
-        print("✗ Some tests failed. Please check the logs for details.")
+        print("⚠️  Some tests failed. Please check the logs for details.")
         return 1
 
 if __name__ == "__main__":

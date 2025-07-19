@@ -41,10 +41,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Virtual Environments
-# .env
-# .venv
-# env/
+
 venv/
 ENV/
 env.bak/
