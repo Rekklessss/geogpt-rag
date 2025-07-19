@@ -39,8 +39,8 @@ CREATE TABLE IF NOT EXISTS spatial_analysis_results (
     result_data JSONB,
     execution_time INTERVAL,
     status VARCHAR(50) DEFAULT 'completed',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    FOREIGN KEY (session_id) REFERENCES conversation_sessions(session_id) ON DELETE CASCADE
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    -- Note: Foreign key to conversation_sessions will be handled by application layer
 );
 
 -- Table for storing map visualizations
@@ -53,8 +53,8 @@ CREATE TABLE IF NOT EXISTS map_visualizations (
     zoom_level INTEGER DEFAULT 10,
     layers JSONB, -- Layer configuration
     style_config JSONB, -- Map styling
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    FOREIGN KEY (session_id) REFERENCES conversation_sessions(session_id) ON DELETE CASCADE
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    -- Note: Foreign key to conversation_sessions will be handled by application layer
 );
 
 -- Table for storing spatial queries and their results
@@ -66,8 +66,8 @@ CREATE TABLE IF NOT EXISTS spatial_queries (
     query_type VARCHAR(100), -- intersection, buffer, nearest, etc.
     result_count INTEGER,
     execution_time INTERVAL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    FOREIGN KEY (session_id) REFERENCES conversation_sessions(session_id) ON DELETE CASCADE
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    -- Note: Foreign key to conversation_sessions will be handled by application layer
 );
 
 -- Table for caching geocoding results

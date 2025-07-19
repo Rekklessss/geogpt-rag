@@ -27,12 +27,11 @@ class LLMProvider(Enum):
 class LLMModel(Enum):
     """Supported LLM models"""
     # OpenAI models (ordered by cost - cheapest first)
-    GPT_4_1_NANO = "gpt-4.1-nano"        # Cheapest: $0.10/$0.40 per 1M tokens
-    GPT_4O_MINI = "gpt-4o-mini"          # Budget: $0.15/$0.60 per 1M tokens
-    GPT_4_1_MINI = "gpt-4.1-mini"        # Mid-range: $0.40/$1.60 per 1M tokens
-    GPT_4_TURBO = "gpt-4-turbo"          # Premium: $10/$30 per 1M tokens
-    GPT_4 = "gpt-4"                      # Expensive: $30/$60 per 1M tokens
-    GPT_3_5_TURBO = "gpt-3.5-turbo"     # Legacy model
+    GPT_4_1_NANO = "gpt-4.1-nano-2025-04-14"        # Cheapest: Latest nano model
+    GPT_4_1_MINI = "gpt-4.1-mini-2025-04-14"        # Budget: Latest mini model
+    GPT_4O_MINI = "gpt-4o-mini-2024-07-18"          # Mid-range: Specific 4o mini version
+    GPT_4_TURBO = "gpt-4-turbo"                      # Premium: $10/$30 per 1M tokens
+    GPT_4 = "gpt-4"                                  # Expensive: $30/$60 per 1M tokens
     
     # Sagemaker model
     GEOGPT_R1 = "geogpt-r1-sagemaker"
@@ -69,15 +68,29 @@ class LLMProviderManager:
         # OpenAI Configuration - Using cheapest models for cost optimization
         openai_key = os.getenv("OPENAI_API_KEY")
         if openai_key:
-            # Primary: Use cheapest model (GPT-4.1 Nano)
+            # Allow model selection via environment variable
+            model_name = os.getenv("LLM_MODEL", "gpt-4.1-nano-2025-04-14").lower()
+            
+            # Map model names to enum values
+            model_mapping = {
+                "gpt-4.1-nano-2025-04-14": LLMModel.GPT_4_1_NANO,
+                "gpt-4.1-mini-2025-04-14": LLMModel.GPT_4_1_MINI,
+                "gpt-4o-mini-2024-07-18": LLMModel.GPT_4O_MINI,
+                "nano": LLMModel.GPT_4_1_NANO,  # Short aliases
+                "mini": LLMModel.GPT_4_1_MINI,
+                "4o-mini": LLMModel.GPT_4O_MINI
+            }
+            
+            selected_model = model_mapping.get(model_name, LLMModel.GPT_4_1_NANO)
+            
             providers[LLMProvider.OPENAI] = LLMConfig(
                 provider=LLMProvider.OPENAI,
-                model=LLMModel.GPT_4_1_NANO,  # Cheapest: $0.10/$0.40 per 1M tokens
+                model=selected_model,
                 api_key=openai_key,
                 max_tokens=int(os.getenv("OPENAI_MAX_TOKENS", "2048")),  # Lower default for cost
                 temperature=float(os.getenv("OPENAI_TEMPERATURE", "0.7"))
             )
-            logger.info("OpenAI provider configured with cheapest model (GPT-4.1 Nano) for cost optimization")
+            logger.info(f"OpenAI provider configured with model: {selected_model.value} for cost optimization")
         
         # AWS Sagemaker Configuration
         sagemaker_endpoint = os.getenv("SAGEMAKER_ENDPOINT", "GeoGPT-R1-Sagemaker-Endpoint")
@@ -105,7 +118,7 @@ class LLMProviderManager:
         if preferred == "auto":
             # Auto mode: strongly prefer OpenAI cheapest models for cost optimization
             if LLMProvider.OPENAI in self.providers:
-                logger.info("Auto mode: Using OpenAI with cheapest models for maximum cost savings")
+                logger.info("Auto mode: Using OpenAI GPT-4.1 Nano for maximum cost savings")
                 return LLMProvider.OPENAI
             elif LLMProvider.SAGEMAKER in self.providers:
                 logger.info("Auto mode: Falling back to Sagemaker (OpenAI not available)")
@@ -313,24 +326,19 @@ class LLMProviderManager:
         return False
     
     def health_check(self) -> Dict[str, Any]:
-        """Check health of all configured providers"""
+        """Perform health check on all providers"""
         health_status = {}
         
         for provider, config in self.providers.items():
             try:
-                test_messages = [{"role": "user", "content": "Hello"}]
-                result = self.generate(
-                    messages=test_messages,
-                    provider=provider,
-                    enable_fallback=False
-                )
-                
+                # Test with a simple message
+                test_messages = [{"role": "user", "content": "Test"}]
+                result = self.generate(test_messages, provider=provider, enable_fallback=False)
                 health_status[provider.value] = {
                     "status": "healthy",
-                    "response_time": result["processing_time"],
-                    "model": config.model.value
+                    "model": config.model.value,
+                    "response_time": result.get("processing_time", 0)
                 }
-                
             except Exception as e:
                 health_status[provider.value] = {
                     "status": "unhealthy",
