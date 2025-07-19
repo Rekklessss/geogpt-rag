@@ -1,0 +1,171 @@
+version: '3.8'
+
+services:
+  geogpt-rag:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: geogpt-rag:latest
+    container_name: geogpt-rag-system
+    restart: unless-stopped
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONPATH=/app
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_REGION=us-east-1
+      # Database configuration
+      - DATABASE_URL=postgresql://geogpt:geogpt_password@postgres:5432/geogpt_spatial
+      - POSTGRES_URL=postgresql://geogpt:geogpt_password@postgres:5432/geogpt_spatial
+      - REDIS_URL=redis://redis:6379
+      # Dynamic configuration - Production values
+      - EC2_INSTANCE_IP=${EC2_INSTANCE_IP:-3.236.251.69}
+      - EC2_INSTANCE_ID=${EC2_INSTANCE_ID:-i-0cf221c2fca3cb3cf}
+      - LLM_PROVIDER=${LLM_PROVIDER:-auto}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4.1-nano}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-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}
+      - OPENAI_MAX_TOKENS=${OPENAI_MAX_TOKENS:-2048}
+      - CONTEXT_WINDOW_SIZE=${CONTEXT_WINDOW_SIZE:-8192}
+      - MAX_CONVERSATION_HISTORY=${MAX_CONVERSATION_HISTORY:-50}
+      # Zilliz Cloud Configuration
+      - ZILLIZ_CLOUD_URI=${ZILLIZ_CLOUD_URI:-https://in03-088dd53cf6b3582.serverless.gcp-us-west1.cloud.zilliz.com}
+      - ZILLIZ_CLOUD_TOKEN=${ZILLIZ_CLOUD_TOKEN:-affa13223a768e6e16b4e2bebf1e3f95b7b9085814d1407470c10922c7469d459cf523c189e99e24a20a1146976edd1a808d34fc}
+    ports:
+      - "8810:8810"  # Embedding service
+      - "8811:8811"  # Reranking service
+      - "8812:8812"  # RAG server (if needed)
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./split_chunks:/app/split_chunks
+      - ~/.aws:/root/.aws:ro  # AWS credentials
+    command: >
+      bash -c "
+        # Set up Git LFS
+        git lfs install
+        
+        # Create necessary directories
+        mkdir -p /app/models/geo-embedding /app/models/geo-reranker /app/logs
+        
+        # Download models if they don't exist
+        if [ ! -f /app/models/geo-embedding/config.json ]; then
+          echo 'Downloading GeoEmbedding model...'
+          cd /app/models/geo-embedding
+          git lfs install
+          git clone https://huggingface.co/GeoGPT-Research-Project/GeoEmbedding . 2>&1 | tee /app/logs/embedding_download.log
+          if [ $? -ne 0 ]; then
+            echo 'Model download failed, trying alternative method...'
+            rm -rf * .*
+            git init
+            git remote add origin https://huggingface.co/GeoGPT-Research-Project/GeoEmbedding
+            git lfs track '*.bin' '*.safetensors' '*.gguf' '*.h5' '*.tflite' '*.tar.gz' '*.ot' '*.onnx'
+            git fetch origin main
+            git checkout main
+          fi
+        fi
+        
+        if [ ! -f /app/models/geo-reranker/config.json ]; then
+          echo 'Downloading GeoReranker model...'
+          cd /app/models/geo-reranker
+          git lfs install
+          git clone https://huggingface.co/GeoGPT-Research-Project/GeoReranker . 2>&1 | tee /app/logs/reranker_download.log
+          if [ $? -ne 0 ]; then
+            echo 'Model download failed, trying alternative method...'
+            rm -rf * .*
+            git init
+            git remote add origin https://huggingface.co/GeoGPT-Research-Project/GeoReranker
+            git lfs track '*.bin' '*.safetensors' '*.gguf' '*.h5' '*.tflite' '*.tar.gz' '*.ot' '*.onnx'
+            git fetch origin main
+            git checkout main
+          fi
+        fi
+        
+        # Verify models are downloaded
+        echo 'Verifying model downloads...'
+        if [ -f /app/models/geo-embedding/config.json ]; then
+          echo 'GeoEmbedding model downloaded successfully'
+        else
+          echo 'WARNING: GeoEmbedding model not found'
+        fi
+        
+        if [ -f /app/models/geo-reranker/config.json ]; then
+          echo 'GeoReranker model downloaded successfully'
+        else
+          echo 'WARNING: GeoReranker model not found'
+        fi
+        
+        # Start embedding service in background
+        cd /app/embedding
+        echo 'Starting embedding service...'
+        python embedding_api.py --model_path /app/models/geo-embedding --port 8810 --fp16 > /app/logs/embedding.log 2>&1 &
+        
+        # Start reranking service in background
+        cd /app/reranking
+        echo 'Starting reranking service...'
+        python reranker_fast_api.py --model_path /app/models/geo-reranker --port 8811 > /app/logs/reranking.log 2>&1 &
+        
+        # Start GeoGPT API service in background
+        cd /app/rag_server
+        echo 'Starting GeoGPT API service...'
+        python geogpt_api.py > /app/logs/geogpt_api.log 2>&1 &
+        
+        # Wait for services to start
+        echo 'Waiting for services to initialize...'
+        sleep 60
+        
+        # Keep container running
+        wait
+      "
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - geogpt-network
+    depends_on:
+      - postgres
+      - redis
+
+  # PostgreSQL Database with PostGIS for spatial operations
+  postgres:
+    image: postgis/postgis:15-3.3
+    container_name: geogpt-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=geogpt_spatial
+      - POSTGRES_USER=geogpt
+      - POSTGRES_PASSWORD=geogpt_password
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_spatial_db.sql:/docker-entrypoint-initdb.d/init_spatial_db.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - geogpt-network
+
+  # Redis for session caching and real-time features
+  redis:
+    image: redis:7.2-alpine
+    container_name: geogpt-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - geogpt-network
+    command: redis-server --appendonly yes
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  geogpt-network:
+    driver: bridge
+
+ 
