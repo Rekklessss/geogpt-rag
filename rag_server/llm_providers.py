@@ -67,7 +67,7 @@ class LLMProviderManager:
         providers = {}
         
         # OpenAI Configuration - Using cheapest models for cost optimization
-        openai_key = os.getenv("OPENAI_API_KEY", "sk-proj-B7FJ-m76t0zLZfngCW04LI_02AushV7t5nyvbr781ORUGhz0l9J2M3LZ0QkF0_L7zv2qTVIzbRT3BlbkFJE6RRmHcE1QapPvOymQPx-XUTsgCRGlwVl8lsq78r6HLZk7Y6DMq7CHD8tMhIqxfvaC4A")
+        openai_key = os.getenv("OPENAI_API_KEY")
         if openai_key:
             # Primary: Use cheapest model (GPT-4.1 Nano)
             providers[LLMProvider.OPENAI] = LLMConfig(

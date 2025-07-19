@@ -22,7 +22,7 @@ PROJECT_DIR="$HOME/geogpt-rag"
 # Production configuration - Updated with current instance details
 PRODUCTION_EC2_IP="3.236.251.69"
 PRODUCTION_EC2_ID="i-0cf221c2fca3cb3cf"
-OPENAI_API_KEY="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"
+OPENAI_API_KEY="${OPENAI_API_KEY:-YOUR_OPENAI_API_KEY_HERE}"
 ZILLIZ_CLOUD_URI="https://in03-088dd53cf6b3582.serverless.gcp-us-west1.cloud.zilliz.com"
 ZILLIZ_CLOUD_TOKEN="affa13223a768e6e16b4e2bebf1e3f95b7b9085814d1407470c10922c7469d459cf523c189e99e24a20a1146976edd1a808d34fc"
 
@@ -576,7 +576,7 @@ if [ "$HAS_GPU" = true ] && [ "$NVIDIA_INSTALLED" = true ]; then
         echo ""
         echo "🔄 To activate GPU support:"
         echo "   sudo reboot"
-        echo "   # After reboot: sudo systemctl restart docker"
+        echo "   # After reboot, GPU will be available for applications"
     fi
 else
     echo "   - GPU acceleration: ❌ CPU-only mode"
