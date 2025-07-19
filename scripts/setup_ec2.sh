@@ -99,7 +99,7 @@ sudo chmod +x /usr/local/bin/docker-compose
 echo "👤 Adding user to docker group..."
 sudo usermod -aG docker $USER
 
-# Install NVIDIA Container Toolkit (Robust installation for all Ubuntu versions)
+# Install NVIDIA Container Toolkit (Updated with official NVIDIA instructions v1.17.8)
 echo "🎮 Installing NVIDIA Container Toolkit..."
 
 # Check if instance has NVIDIA GPU
@@ -117,53 +117,34 @@ if [ "$HAS_GPU" = true ]; then
     sudo rm -f /etc/apt/sources.list.d/nvidia-container-toolkit.list
     sudo rm -f /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
     
-    # Method 1: Try generic repository (works for Ubuntu 24.04 Noble)
-    echo "📦 Installing NVIDIA Container Toolkit using generic repository..."
-    if curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg; then
-        # Use generic DEB repository for Ubuntu
-        echo "deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://nvidia.github.io/libnvidia-container/stable/deb/\$(dpkg --print-architecture) /" | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+    echo "📦 Installing NVIDIA Container Toolkit using official instructions..."
+    
+    # Configure the production repository (Official NVIDIA method)
+    if curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
+        && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+        sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+        sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list; then
         
+        # Update package lists
         sudo apt-get update
-        if sudo apt-get install -y nvidia-container-toolkit nvidia-container-runtime; then
+        
+        # Install NVIDIA Container Toolkit packages with specific version
+        export NVIDIA_CONTAINER_TOOLKIT_VERSION=1.17.8-1
+        if sudo apt-get install -y \
+            nvidia-container-toolkit=${NVIDIA_CONTAINER_TOOLKIT_VERSION} \
+            nvidia-container-toolkit-base=${NVIDIA_CONTAINER_TOOLKIT_VERSION} \
+            libnvidia-container-tools=${NVIDIA_CONTAINER_TOOLKIT_VERSION} \
+            libnvidia-container1=${NVIDIA_CONTAINER_TOOLKIT_VERSION}; then
+            
             echo "✅ NVIDIA Container Toolkit installed successfully"
             NVIDIA_INSTALLED=true
         else
-            echo "❌ Generic repository installation failed, trying alternative method..."
+            echo "❌ NVIDIA Container Toolkit installation failed"
             NVIDIA_INSTALLED=false
         fi
     else
-        echo "❌ Failed to add NVIDIA GPG key, trying alternative method..."
+        echo "❌ Failed to configure NVIDIA repository"
         NVIDIA_INSTALLED=false
-    fi
-    
-    # Method 2: Direct package installation if repository method fails
-    if [ "$NVIDIA_INSTALLED" = false ]; then
-        echo "📦 Trying direct package installation..."
-        # Clean up failed repo
-        sudo rm -f /etc/apt/sources.list.d/nvidia-container-toolkit.list
-        
-        # Download packages directly
-        cd /tmp
-        if curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/amd64/libnvidia-container1_1.17.8-1_amd64.deb -o libnvidia-container1.deb && \
-           curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/amd64/libnvidia-container-tools_1.17.8-1_amd64.deb -o libnvidia-container-tools.deb && \
-           curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/amd64/nvidia-container-toolkit_1.17.8-1_amd64.deb -o nvidia-container-toolkit.deb && \
-           curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/amd64/nvidia-container-runtime_3.14.0-1_all.deb -o nvidia-container-runtime.deb; then
-            
-            # Install packages
-            if sudo dpkg -i libnvidia-container1.deb libnvidia-container-tools.deb nvidia-container-toolkit.deb nvidia-container-runtime.deb; then
-                # Fix any dependency issues
-                sudo apt-get install -f -y
-                echo "✅ NVIDIA Container Toolkit installed via direct download"
-                NVIDIA_INSTALLED=true
-            else
-                echo "❌ Direct package installation failed"
-                NVIDIA_INSTALLED=false
-            fi
-        else
-            echo "❌ Failed to download NVIDIA packages"
-            NVIDIA_INSTALLED=false
-        fi
-        cd "$PROJECT_DIR"
     fi
     
     # Configure Docker for NVIDIA if installation succeeded
@@ -176,7 +157,7 @@ if [ "$HAS_GPU" = true ]; then
             echo "✅ NVIDIA drivers are already installed"
         else
             echo "⚠️ NVIDIA drivers not found. Installing recommended drivers..."
-            if sudo apt install -y nvidia-utils-535 nvidia-driver-535; then
+            if sudo apt install -y nvidia-utils-535-server nvidia-driver-535-server; then
                 echo "🔄 NVIDIA drivers installed. System reboot recommended after setup completion."
                 echo "💡 After reboot, run: sudo systemctl restart docker"
             else
@@ -201,6 +182,20 @@ else
     echo "🖥️ Configuring Docker for CPU-only operation..."
 fi
 sudo systemctl restart docker
+
+# Test NVIDIA Container Toolkit installation
+if [ "$HAS_GPU" = true ] && [ "$NVIDIA_INSTALLED" = true ]; then
+    echo "🧪 Testing NVIDIA Container Toolkit installation..."
+    sleep 5  # Wait for Docker to restart
+    
+    if sudo docker run --rm --gpus all nvidia/cuda:12.2-base-ubuntu22.04 nvidia-smi >/dev/null 2>&1; then
+        echo "✅ NVIDIA Container Toolkit working correctly"
+        echo "🎮 GPU acceleration available for GeoGPT services"
+    else
+        echo "⚠️ NVIDIA Container Toolkit test failed"
+        echo "💡 System will work in CPU-only mode"
+    fi
+fi
 
 # Install AWS CLI
 echo "☁️ Installing AWS CLI..."
@@ -308,7 +303,7 @@ EC2_INSTANCE_IP=$PUBLIC_IP
 EC2_INSTANCE_ID=$PRODUCTION_EC2_ID
 EC2_REGION=us-east-1
 LLM_PROVIDER=auto
-LLM_MODEL=gpt-4.1-nano
+LLM_MODEL=gpt-4.1-nano-2025-04-14
 OPENAI_API_KEY=$OPENAI_API_KEY
 OPENAI_MAX_TOKENS=2048
 ZILLIZ_CLOUD_URI=$ZILLIZ_CLOUD_URI
@@ -316,6 +311,7 @@ ZILLIZ_CLOUD_TOKEN=$ZILLIZ_CLOUD_TOKEN
 CONTEXT_WINDOW_SIZE=8192
 MAX_CONVERSATION_HISTORY=50
 DATABASE_URL=postgresql://geogpt:geogpt_password@postgres:5432/geogpt_spatial
+POSTGRES_PASSWORD=geogpt_password
 REDIS_URL=redis://redis:6379
 EOF
 
