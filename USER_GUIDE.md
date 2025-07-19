@@ -44,7 +44,7 @@ GeoGPT-RAG is an advanced AI system that makes complex geospatial analysis acces
 ### Accessing GeoGPT
 
 1. **API Interface**: The main GeoGPT system runs as a single container
-   - Production API: `http://3.81.101.190:8812`
+   - Production API: `http://${EC2_INSTANCE_IP}:8812`
    - Local API: `http://localhost:8812`
    - API Documentation: `http://localhost:8812/docs`
 
@@ -70,7 +70,7 @@ npm install
 
 # Configure API endpoints
 cp .env.example .env.local
-# Edit .env.local with your server IP (default: 3.81.101.190)
+# Edit .env.local with your server IP (default: ${EC2_INSTANCE_IP})
 
 # Start development server
 npm run dev

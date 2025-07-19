@@ -30,7 +30,7 @@ get_ip_address() {
         # IP provided via command line argument
         GEOGPT_PUBLIC_IP="$2"
         echo "Using provided IP address: $GEOGPT_PUBLIC_IP"
-    elif [[ -z "$GEOGPT_PUBLIC_IP" ]] || [[ "$GEOGPT_PUBLIC_IP" == "3.81.101.190" ]]; then
+    elif [[ -z "$GEOGPT_PUBLIC_IP" ]] || [[ "$GEOGPT_PUBLIC_IP" == "${EC2_INSTANCE_IP}" ]]; then
         # Use production IP as default
         GEOGPT_PUBLIC_IP="$PRODUCTION_EC2_IP"
         echo "🔧 Using production EC2 IP: $GEOGPT_PUBLIC_IP"

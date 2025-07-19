@@ -50,8 +50,8 @@ A modern React-based frontend interface for the GeoGPT AI system - Chain-of-Thou
    
    Update `.env.local` with your API endpoints:
    ```env
-   NEXT_PUBLIC_RAG_EMBEDDING_API=http://3.81.101.190:8810
-   NEXT_PUBLIC_RAG_RERANKING_API=http://3.81.101.190:8811
+   NEXT_PUBLIC_RAG_EMBEDDING_API=http://${EC2_INSTANCE_IP}:8810
+   NEXT_PUBLIC_RAG_RERANKING_API=http://${EC2_INSTANCE_IP}:8811
    ```
 
 4. **Start development server**
@@ -157,8 +157,8 @@ Configure API endpoints in `next.config.js`:
 
 ```javascript
 env: {
-  RAG_EMBEDDING_API: 'http://3.81.101.190:8810',
-  RAG_RERANKING_API: 'http://3.81.101.190:8811',
+  RAG_EMBEDDING_API: 'http://${EC2_INSTANCE_IP}:8810',
+  RAG_RERANKING_API: 'http://${EC2_INSTANCE_IP}:8811',
 }
 ```
 

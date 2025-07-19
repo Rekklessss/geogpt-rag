@@ -3,7 +3,7 @@
 [![Models](https://img.shields.io/badge/🤗%20Models-GeoGPT--Research-blue)](https://huggingface.co/GeoGPT-Research-Project)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue)](docker-compose.yml)
-[![Status](https://img.shields.io/badge/Status-Production-green)](http://3.81.101.190:8812/health)
+[![Status](https://img.shields.io/badge/Status-Production-green)](http://${EC2_INSTANCE_IP}:8812/health)
 
 ## 🌍 Overview
 
@@ -133,7 +133,7 @@ Open your browser and navigate to:
 - **Frontend**: `http://localhost:3000` (after frontend setup)
 - **API Docs**: `http://localhost:8812/docs`
 - **Health Monitor**: `http://localhost:8812/health`
-- **Production API**: `http://3.81.101.190:8812`
+- **Production API**: `http://${EC2_INSTANCE_IP}:8812`
 
 ## 📖 Documentation
 
@@ -253,8 +253,8 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) for deta
 
 ## 🔗 Quick Links
 
-- **Live Demo**: [http://3.81.101.190:8812](http://3.81.101.190:8812)
-- **API Docs**: [http://3.81.101.190:8812/docs](http://3.81.101.190:8812/docs)
+- **Live Demo**: [http://${EC2_INSTANCE_IP}:8812](http://${EC2_INSTANCE_IP}:8812)
+- **API Docs**: [http://${EC2_INSTANCE_IP}:8812/docs](http://${EC2_INSTANCE_IP}:8812/docs)
 - **Models**: [Hugging Face Collection](https://huggingface.co/GeoGPT-Research-Project)
 - **Issues**: [GitHub Issues](https://github.com/your-org/geogpt-rag/issues)
 
