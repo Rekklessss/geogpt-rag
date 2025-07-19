@@ -99,23 +99,107 @@ sudo chmod +x /usr/local/bin/docker-compose
 echo "👤 Adding user to docker group..."
 sudo usermod -aG docker $USER
 
-# Install NVIDIA Container Toolkit (Fixed for Ubuntu 24.04 Noble)
+# Install NVIDIA Container Toolkit (Robust installation for all Ubuntu versions)
 echo "🎮 Installing NVIDIA Container Toolkit..."
-sudo rm -f /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
 
-# Install the repository
-distribution=$(. /etc/os-release;echo $ID$VERSION_ID) \
-    && curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
-    && curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
-        sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-        sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+# Check if instance has NVIDIA GPU
+if lspci | grep -i nvidia >/dev/null 2>&1; then
+    echo "✅ NVIDIA GPU detected, installing NVIDIA Container Toolkit..."
+    HAS_GPU=true
+else
+    echo "⚠️ No NVIDIA GPU detected, skipping NVIDIA Container Toolkit installation"
+    echo "💡 System will work in CPU-only mode"
+    HAS_GPU=false
+fi
 
-sudo apt-get update
-sudo apt-get install -y nvidia-container-toolkit nvidia-container-runtime
+if [ "$HAS_GPU" = true ]; then
+    # Clean up any previous failed installations
+    sudo rm -f /etc/apt/sources.list.d/nvidia-container-toolkit.list
+    sudo rm -f /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+    
+    # Method 1: Try generic repository (works for Ubuntu 24.04 Noble)
+    echo "📦 Installing NVIDIA Container Toolkit using generic repository..."
+    if curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg; then
+        # Use generic DEB repository for Ubuntu
+        echo "deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://nvidia.github.io/libnvidia-container/stable/deb/\$(dpkg --print-architecture) /" | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+        
+        sudo apt-get update
+        if sudo apt-get install -y nvidia-container-toolkit nvidia-container-runtime; then
+            echo "✅ NVIDIA Container Toolkit installed successfully"
+            NVIDIA_INSTALLED=true
+        else
+            echo "❌ Generic repository installation failed, trying alternative method..."
+            NVIDIA_INSTALLED=false
+        fi
+    else
+        echo "❌ Failed to add NVIDIA GPG key, trying alternative method..."
+        NVIDIA_INSTALLED=false
+    fi
+    
+    # Method 2: Direct package installation if repository method fails
+    if [ "$NVIDIA_INSTALLED" = false ]; then
+        echo "📦 Trying direct package installation..."
+        # Clean up failed repo
+        sudo rm -f /etc/apt/sources.list.d/nvidia-container-toolkit.list
+        
+        # Download packages directly
+        cd /tmp
+        if curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/amd64/libnvidia-container1_1.17.8-1_amd64.deb -o libnvidia-container1.deb && \
+           curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/amd64/libnvidia-container-tools_1.17.8-1_amd64.deb -o libnvidia-container-tools.deb && \
+           curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/amd64/nvidia-container-toolkit_1.17.8-1_amd64.deb -o nvidia-container-toolkit.deb && \
+           curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/amd64/nvidia-container-runtime_3.14.0-1_all.deb -o nvidia-container-runtime.deb; then
+            
+            # Install packages
+            if sudo dpkg -i libnvidia-container1.deb libnvidia-container-tools.deb nvidia-container-toolkit.deb nvidia-container-runtime.deb; then
+                # Fix any dependency issues
+                sudo apt-get install -f -y
+                echo "✅ NVIDIA Container Toolkit installed via direct download"
+                NVIDIA_INSTALLED=true
+            else
+                echo "❌ Direct package installation failed"
+                NVIDIA_INSTALLED=false
+            fi
+        else
+            echo "❌ Failed to download NVIDIA packages"
+            NVIDIA_INSTALLED=false
+        fi
+        cd "$PROJECT_DIR"
+    fi
+    
+    # Configure Docker for NVIDIA if installation succeeded
+    if [ "$NVIDIA_INSTALLED" = true ]; then
+        echo "🔧 Configuring Docker for NVIDIA..."
+        sudo nvidia-ctk runtime configure --runtime=docker
+        
+        # Check if NVIDIA drivers are installed
+        if command -v nvidia-smi >/dev/null 2>&1; then
+            echo "✅ NVIDIA drivers are already installed"
+        else
+            echo "⚠️ NVIDIA drivers not found. Installing recommended drivers..."
+            if sudo apt install -y nvidia-utils-535 nvidia-driver-535; then
+                echo "🔄 NVIDIA drivers installed. System reboot recommended after setup completion."
+                echo "💡 After reboot, run: sudo systemctl restart docker"
+            else
+                echo "❌ Failed to install NVIDIA drivers. Manual installation may be required."
+            fi
+        fi
+    else
+        echo "❌ NVIDIA Container Toolkit installation failed. Continuing with CPU-only setup..."
+        echo "💡 System will work without GPU acceleration"
+    fi
+else
+    echo "💡 CPU-only instance detected. Skipping NVIDIA installation."
+fi
 
-# Configure Docker daemon for NVIDIA
-echo "🎮 Configuring Docker for NVIDIA..."
-sudo nvidia-ctk runtime configure --runtime=docker
+# Configure Docker daemon 
+echo "🐳 Configuring Docker daemon..."
+if [ "$HAS_GPU" = true ] && [ "$NVIDIA_INSTALLED" = true ]; then
+    echo "🎮 Configuring Docker with NVIDIA runtime..."
+    # NVIDIA configuration was already done above
+    echo "✅ Docker configured with NVIDIA support"
+else
+    echo "🖥️ Configuring Docker for CPU-only operation..."
+fi
 sudo systemctl restart docker
 
 # Install AWS CLI
@@ -335,7 +419,11 @@ echo "🐳 Docker containers:"
 sudo docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 echo ""
 echo "🎮 GPU status:"
-nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu --format=csv,noheader,nounits 2>/dev/null || echo "No GPU detected"
+if command -v nvidia-smi >/dev/null 2>&1; then
+    nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu --format=csv,noheader,nounits 2>/dev/null || echo "NVIDIA drivers installed but GPU not accessible"
+else
+    echo "CPU-only instance (no NVIDIA GPU/drivers)"
+fi
 echo ""
 echo "🗃️ Database services:"
 docker exec geogpt-postgres pg_isready -h localhost -p 5432 >/dev/null 2>&1 && echo "✅ PostgreSQL OK" || echo "❌ PostgreSQL DOWN"
@@ -436,9 +524,20 @@ echo ""
 if [ $POSTGRES_STATUS -eq 0 ] && [ $REDIS_STATUS -eq 0 ] && [ $EMBEDDING_STATUS -eq 0 ] && [ $RERANKING_STATUS -eq 0 ] && [ $GEOGPT_STATUS -eq 0 ] && [ $LLM_STATUS -eq 0 ] && [ $TEST_STATUS -eq 0 ]; then
     echo "🎉 Initial EC2 setup completed successfully!"
     echo "💡 All services are running with production configuration."
-    echo "🚀 OpenAI + Sagemaker LLM providers configured"
+    echo "🚀 OpenAI + Sagemaker LLM providers configured (cost-optimized)"
     echo "🗃️ PostgreSQL + Redis database services active"
     echo "🗺️ Map visualization and GIS operations ready"
+    
+    if [ "$HAS_GPU" = true ] && [ "$NVIDIA_INSTALLED" = true ]; then
+        echo "🎮 NVIDIA GPU support enabled"
+        if command -v nvidia-smi >/dev/null 2>&1; then
+            echo "✅ NVIDIA drivers installed and ready"
+        else
+            echo "🔄 NVIDIA drivers installed - reboot recommended for GPU access"
+        fi
+    else
+        echo "🖥️ CPU-only mode (no GPU acceleration)"
+    fi
 else
     echo "⚠️ Initial setup completed with some issues. Check logs for details:"
     echo "   docker-compose logs -f"
@@ -463,9 +562,26 @@ echo ""
 echo "4. 🔍 View logs:"
 echo "   sudo docker-compose logs -f"
 echo ""
-echo "💡 Notes:"
+echo "💡 System Configuration:"
 echo "   - IP address $PUBLIC_IP is set in environment"
 echo "   - Docker group membership active (logout/login for non-sudo access)"
+echo "   - Cost-optimized LLM: GPT-4.1 Nano (\$0.10/\$0.40 per 1M tokens)"
 echo "   - All services configured for this IP automatically"
+
+if [ "$HAS_GPU" = true ] && [ "$NVIDIA_INSTALLED" = true ]; then
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        echo "   - GPU acceleration: ✅ Ready"
+    else
+        echo "   - GPU acceleration: 🔄 Reboot required to activate drivers"
+        echo ""
+        echo "🔄 To activate GPU support:"
+        echo "   sudo reboot"
+        echo "   # After reboot: sudo systemctl restart docker"
+    fi
+else
+    echo "   - GPU acceleration: ❌ CPU-only mode"
+fi
 echo ""
-echo "📚 For detailed usage examples, see: DEPLOYMENT_README.md and IP_MANAGEMENT_GUIDE.md" 
+echo "📚 Documentation:"
+echo "   - Cost optimization: COST_OPTIMIZATION_GUIDE.md"
+echo "   - Production deployment: PRODUCTION_DEPLOYMENT_GUIDE.md" 
