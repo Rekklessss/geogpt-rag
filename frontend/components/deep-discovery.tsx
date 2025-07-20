@@ -25,14 +25,13 @@ import {
   BookOpen,
   Zap,
   Target,
-  Filter
+  Filter,
+  ChevronUp
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
-import { discoveryService, handleApiError } from '@/lib/api'
-import type { DiscoveryStep, DiscoverySource } from '@/types'
-import { mockDiscoverySteps, mockDiscoverySources } from '@/lib/mock-data'
+import { Badge } from '@/components/ui/badge'
 
 interface DeepDiscoveryProps {
   isActive: boolean
@@ -41,13 +40,56 @@ interface DeepDiscoveryProps {
   className?: string
 }
 
+interface DiscoveryApiRequest {
+  query: string
+  max_sources?: number
+  include_web_search?: boolean
+  include_knowledge_base?: boolean
+  discovery_type?: string
+}
+
+interface DiscoveryStep {
+  id: number
+  name: string
+  status: 'pending' | 'running' | 'completed' | 'error'
+  progress: number
+  result?: string | null
+  sources?: Array<{
+    title: string
+    type: string
+    relevance: number
+    excerpt: string
+    url?: string
+  }> | null
+  error?: string | null
+}
+
+interface DiscoverySource {
+  title: string
+  type: string
+  relevance: number
+  excerpt: string
+  url?: string
+  metadata?: any
+}
+
+interface DiscoveryApiResponse {
+  discovery_id: string
+  status: 'running' | 'completed' | 'error' | 'paused'
+  progress: number
+  current_step: number
+  steps: DiscoveryStep[]
+  sources: DiscoverySource[]
+  final_report?: string | null
+}
+
 export function DeepDiscovery({ isActive, onToggle, query, className }: DeepDiscoveryProps) {
   const [currentStep, setCurrentStep] = useState(1)
   const [discoveryProgress, setDiscoveryProgress] = useState(0)
   const [expandedStep, setExpandedStep] = useState<number>(1)
   const [discoveryState, setDiscoveryState] = useState<'starting' | 'running' | 'paused' | 'completed' | 'error'>('starting')
   const [sources, setSources] = useState<DiscoverySource[]>([])
-  const [steps, setSteps] = useState<DiscoveryStep[]>(mockDiscoverySteps)
+  const [steps, setSteps] = useState<DiscoveryStep[]>([])
   const [discoveryId, setDiscoveryId] = useState<string | null>(null)
   const [finalReport, setFinalReport] = useState<string | null>(null)
   const [webSearchEnabled, setWebSearchEnabled] = useState(true)
@@ -55,132 +97,245 @@ export function DeepDiscovery({ isActive, onToggle, query, className }: DeepDisc
   const [filterType, setFilterType] = useState<string>('all')
   const [startTime, setStartTime] = useState<Date | null>(null)
   const [elapsedTime, setElapsedTime] = useState(0)
+  const [error, setError] = useState<string | null>(null)
 
-  // Initialize discovery when component becomes active
-  useEffect(() => {
-    if (isActive && discoveryState === 'starting') {
+  // Start discovery process
+  const startDiscovery = async () => {
+    try {
       setStartTime(new Date())
-      setDiscoveryId(`disc_${Date.now()}`)
-      setSources(mockDiscoverySources)
+      setError(null)
+      setDiscoveryState('starting')
+
+      const requestBody: DiscoveryApiRequest = {
+        query: query,
+        max_sources: 20,
+        include_web_search: webSearchEnabled,
+        include_knowledge_base: knowledgeBaseEnabled,
+        discovery_type: filterType === 'all' ? 'comprehensive' : filterType
+      }
+
+      const response = await fetch('http://54.224.133.45:8812/discovery/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Discovery API Error: ${response.status} ${response.statusText}`)
+      }
+
+      const data: DiscoveryApiResponse = await response.json()
+      setDiscoveryId(data.discovery_id)
+      setDiscoveryState(data.status === 'running' ? 'running' : data.status)
       
-      // Start the discovery process
-      setTimeout(() => {
-        setDiscoveryState('running')
-      }, 1000)
-    }
-  }, [isActive, discoveryState])
-
-  // Update elapsed time
-  useEffect(() => {
-    if (discoveryState === 'running' && startTime) {
-      const interval = setInterval(() => {
-        setElapsedTime(Math.floor((Date.now() - startTime.getTime()) / 1000))
-      }, 1000)
+      // Update initial state
+      updateFromApiResponse(data)
       
-      return () => clearInterval(interval)
+      // Start polling for updates with timeout
+      if (data.status === 'running') {
+        pollDiscoveryStatus(data.discovery_id, 0)  // Add attempt counter
+      }
+
+    } catch (error) {
+      console.error('Discovery Start Error:', error)
+      setError(`Failed to start discovery: ${error instanceof Error ? error.message : 'Unknown error'}. Using fallback mode.`)
+      
+      // Fallback to simulated discovery for demo purposes
+      startFallbackDiscovery()
     }
-  }, [discoveryState, startTime])
+  }
 
-  // Simulate discovery progress
-  useEffect(() => {
-    if (!isActive || discoveryState !== 'running') return
+  // Fallback discovery simulation when backend fails
+  const startFallbackDiscovery = () => {
+    setDiscoveryState('running')
+    const fallbackSteps: DiscoveryStep[] = [
+      { id: 1, name: "Query Analysis & Planning", status: 'running', progress: 0 },
+      { id: 2, name: "Knowledge Base Search", status: 'pending', progress: 0 },
+      { id: 3, name: "Web Intelligence Gathering", status: 'pending', progress: 0 },
+      { id: 4, name: "Cross-Reference Analysis", status: 'pending', progress: 0 },
+      { id: 5, name: "Synthesis & Report Generation", status: 'pending', progress: 0 },
+    ]
+    setSteps(fallbackSteps)
+    
+    // Simulate progressive completion
+    simulateDiscoveryProgress(fallbackSteps, 0)
+  }
 
-    const interval = setInterval(() => {
-      setSteps(prevSteps => {
-        const updatedSteps = [...prevSteps]
-        const runningStepIndex = updatedSteps.findIndex(step => step.status === 'running')
+  // Simulate discovery progress for fallback mode
+  const simulateDiscoveryProgress = (steps: DiscoveryStep[], currentStepIndex: number) => {
+    if (currentStepIndex >= steps.length || discoveryState !== 'running') {
+      // Complete discovery
+      setDiscoveryState('completed')
+      setDiscoveryProgress(100)
+      setFinalReport(`# Discovery Complete for: "${query}"
+
+## Summary
+The discovery process has been completed with ${sources.length} sources found and analyzed.
+
+## Key Findings
+- Query analysis identified key concepts related to geospatial analysis
+- Knowledge base search found relevant documentation and resources
+- Cross-reference analysis revealed important patterns and insights
+
+## Recommendations
+- Further analysis could benefit from additional data sources
+- Consider implementing the suggested methodologies for best results
+
+*Note: This is a demonstration of the discovery system. Full backend integration is in progress.*`)
+      return
+    }
+
+    const currentStep = steps[currentStepIndex]
+    
+    // Animate current step progress
+    let progress = 0
+    const progressInterval = setInterval(() => {
+      progress += Math.random() * 15 + 5
+      
+      if (progress >= 100) {
+        progress = 100
+        clearInterval(progressInterval)
         
-        if (runningStepIndex !== -1) {
-          const runningStep = updatedSteps[runningStepIndex]
-          const newProgress = Math.min(runningStep.progress + Math.random() * 8 + 2, 100)
-          
-          updatedSteps[runningStepIndex] = {
-            ...runningStep,
-            progress: newProgress
-          }
-          
-          // Complete current step and start next one
-          if (newProgress >= 100) {
-            updatedSteps[runningStepIndex] = {
-              ...runningStep,
-              status: 'completed',
-              progress: 100,
-              result: generateStepResult(runningStep.name)
-            }
-            
-            // Start next step
-            const nextStepIndex = runningStepIndex + 1
-            if (nextStepIndex < updatedSteps.length) {
-              updatedSteps[nextStepIndex] = {
-                ...updatedSteps[nextStepIndex],
-                status: 'running',
-                progress: 0
-              }
-              setCurrentStep(nextStepIndex + 1)
-            } else {
-              // All steps completed
-              setDiscoveryState('completed')
-              setFinalReport(generateFinalReport())
-            }
+        // Complete current step
+        const updatedSteps = [...steps]
+        updatedSteps[currentStepIndex] = {
+          ...currentStep,
+          status: 'completed',
+          progress: 100,
+          result: generateStepResult(currentStep.name)
+        }
+        
+        // Start next step
+        if (currentStepIndex + 1 < steps.length) {
+          updatedSteps[currentStepIndex + 1] = {
+            ...updatedSteps[currentStepIndex + 1],
+            status: 'running',
+            progress: 0
           }
         }
         
-        return updatedSteps
-      })
-
-      // Update overall progress
-      setDiscoveryProgress(prev => {
-        const totalSteps = steps.length
-        const completedSteps = steps.filter(step => step.status === 'completed').length
-        const runningStep = steps.find(step => step.status === 'running')
-        const runningProgress = runningStep ? runningStep.progress / 100 : 0
+        setSteps(updatedSteps)
+        setCurrentStep(currentStepIndex + 2)
+        setDiscoveryProgress(((currentStepIndex + 1) / steps.length) * 100)
         
-        return Math.min(((completedSteps + runningProgress) / totalSteps) * 100, 100)
-      })
-    }, 1500)
+        // Add some demo sources
+        if (currentStepIndex === 1) { // Knowledge base search
+          setSources(prev => [...prev, ...generateDemoSources('knowledge_base')])
+        } else if (currentStepIndex === 2) { // Web search
+          setSources(prev => [...prev, ...generateDemoSources('web_search')])
+        }
+        
+        // Continue with next step after delay
+        setTimeout(() => {
+          simulateDiscoveryProgress(updatedSteps, currentStepIndex + 1)
+        }, 1000)
+        
+      } else {
+        // Update progress
+        const updatedSteps = [...steps]
+        updatedSteps[currentStepIndex] = { ...currentStep, progress }
+        setSteps(updatedSteps)
+      }
+    }, 800)
+  }
 
-    return () => clearInterval(interval)
-  }, [isActive, discoveryState, steps])
-
+  // Generate demo step results
   const generateStepResult = (stepName: string): string => {
     const results = {
-      'Query Analysis & Planning': 'Successfully identified key concepts: urban heat island, thermal analysis, satellite data, mitigation strategies',
-      'Knowledge Base Search': 'Found 23 relevant documents in knowledge base covering UHI research, case studies, and methodologies',
-      'Web Intelligence Gathering': 'Collected 47 recent research papers, government reports, and satellite data sources from web databases',
-      'Cross-Reference Analysis': 'Validated findings across 15 authoritative sources with 94% consensus on key climate trends',
-      'Synthesis & Report Generation': 'Generated comprehensive analysis with actionable recommendations and supporting evidence'
+      'Query Analysis & Planning': `Analyzed query "${query}" and identified key concepts for comprehensive research.`,
+      'Knowledge Base Search': `Found relevant documents in knowledge base covering the requested topic.`,
+      'Web Intelligence Gathering': `Collected recent research and information from web sources.`,
+      'Cross-Reference Analysis': `Analyzed correlations and patterns across discovered sources.`,
+      'Synthesis & Report Generation': `Generated comprehensive report with findings and recommendations.`
     } as Record<string, string>
     return results[stepName] || 'Analysis completed successfully'
   }
 
-  const generateFinalReport = (): string => {
-    return `## Urban Heat Island Analysis: Comprehensive Research Report
+  // Generate demo sources
+  const generateDemoSources = (type: string): DiscoverySource[] => {
+    const baseData = {
+      knowledge_base: [
+        { title: "GIS Fundamentals", excerpt: "Introduction to Geographic Information Systems and spatial analysis concepts..." },
+        { title: "Spatial Analysis Methods", excerpt: "Comprehensive guide to spatial analysis techniques and methodologies..." },
+      ],
+      web_search: [
+        { title: "Recent GIS Research", excerpt: "Latest developments in geospatial technology and applications..." },
+        { title: "Industry Best Practices", excerpt: "Current best practices in geographic information systems..." },
+      ]
+    }
 
-### Executive Summary
-Based on extensive analysis of 23 knowledge base documents, 47 web sources, and cross-validation across multiple datasets, this report provides comprehensive insights into urban heat island effects and mitigation strategies.
-
-### Key Findings
-1. **Temperature Impact**: Urban areas show 3-8°C temperature differences compared to rural surroundings
-2. **Growth Patterns**: UHI intensity correlates strongly with urban density and building materials
-3. **Seasonal Variation**: Peak effects occur during summer months with clear sky conditions
-4. **Health Implications**: Increased heat stress affects vulnerable populations disproportionately
-
-### Data Sources Analyzed
-- **Academic Papers**: 23 peer-reviewed studies from climatology journals
-- **Government Reports**: 12 official climate assessment documents
-- **Satellite Data**: MODIS and Landsat thermal imagery analysis
-- **Municipal Studies**: 8 city-specific UHI assessments
-
-### Recommendations
-1. **Green Infrastructure**: Implement urban forest coverage of 30%+ in high-density areas
-2. **Cool Materials**: Mandate reflective roofing and pavement materials
-3. **Building Design**: Encourage passive cooling and natural ventilation
-4. **Monitoring Systems**: Establish real-time temperature monitoring networks
-
-### Confidence Level: 94%
-This analysis demonstrates high confidence based on convergent evidence from multiple independent sources and established methodologies.`
+    const data = baseData[type as keyof typeof baseData] || baseData.knowledge_base
+    
+    return data.map((item, index) => ({
+      title: item.title,
+      type: type,
+      relevance: 0.8 + Math.random() * 0.2,
+      excerpt: item.excerpt,
+      url: type === 'web_search' ? `https://example.com/${item.title.toLowerCase().replace(/\s+/g, '-')}` : undefined,
+      metadata: { demo: true }
+    }))
   }
 
+  // Update component state from API response
+  const updateFromApiResponse = (data: DiscoveryApiResponse) => {
+    setDiscoveryProgress(data.progress)
+    setDiscoveryState(data.status === 'running' ? 'running' : data.status)
+    setSteps(data.steps)
+    setCurrentStep(data.current_step)
+    setSources(data.sources)
+    
+    if (data.final_report) {
+      setFinalReport(data.final_report)
+    }
+  }
+
+  // Poll discovery status with timeout and retry logic
+  const pollDiscoveryStatus = async (id: string, attempts: number = 0) => {
+    if (attempts > 20) { // Stop after 20 attempts (40 seconds)
+      setError('Discovery polling timed out. The backend may be processing slowly.')
+      setDiscoveryState('error')
+      return
+    }
+
+    try {
+      const response = await fetch(`http://54.224.133.45:8812/discovery/${id}`)
+      
+      if (!response.ok) {
+        throw new Error(`Status API Error: ${response.status} ${response.statusText}`)
+      }
+
+      const data: DiscoveryApiResponse = await response.json()
+      
+      // Check if discovery is stuck in error state
+      if (data.status === 'error' && attempts > 2) {
+        setError('Backend discovery encountered an error. Switching to demo mode.')
+        startFallbackDiscovery()
+        return
+      }
+      
+      updateFromApiResponse(data)
+
+      // Continue polling if still running
+      if (data.status === 'running') {
+        setTimeout(() => pollDiscoveryStatus(id, attempts + 1), 2000)
+      }
+
+    } catch (error) {
+      console.error('Discovery Poll Error:', error)
+      
+      if (attempts > 3) {
+        setError('Lost connection to discovery service. Switching to demo mode.')
+        startFallbackDiscovery()
+      } else {
+        // Retry polling
+        setTimeout(() => pollDiscoveryStatus(id, attempts + 1), 3000)
+      }
+    }
+  }
+
+  // Get appropriate icon for step status
   const getStepIcon = (step: DiscoveryStep) => {
     switch (step.status) {
       case 'completed':
@@ -194,7 +349,18 @@ This analysis demonstrates high confidence based on convergent evidence from mul
     }
   }
 
-  const getSourceIcon = (type: DiscoverySource['type']) => {
+  // Get appropriate icon for step type
+  const getStepTypeIcon = (stepName: string) => {
+    const name = stepName.toLowerCase()
+    if (name.includes('web') || name.includes('search')) return <Globe className="h-4 w-4" />
+    if (name.includes('knowledge') || name.includes('database')) return <Database className="h-4 w-4" />
+    if (name.includes('analyze') || name.includes('process')) return <Brain className="h-4 w-4" />
+    if (name.includes('report') || name.includes('synthesis')) return <FileText className="h-4 w-4" />
+    return <Search className="h-4 w-4" />
+  }
+
+  // Get appropriate icon for source type
+  const getSourceIcon = (type: string) => {
     switch (type) {
       case 'knowledge_base': return <FileText className="h-4 w-4 text-blue-500" />
       case 'web_search': return <Globe className="h-4 w-4 text-green-500" />
@@ -204,6 +370,73 @@ This analysis demonstrates high confidence based on convergent evidence from mul
       default: return <Database className="h-4 w-4 text-gray-500" />
     }
   }
+
+  // Pause discovery
+  const pauseDiscovery = async () => {
+    if (discoveryId) {
+      try {
+        const response = await fetch(`http://54.224.133.45:8812/discovery/${discoveryId}/pause`, {
+          method: 'POST'
+        })
+        
+        if (response.ok) {
+          setDiscoveryState('paused')
+          return
+        }
+      } catch (error) {
+        console.error('Pause Discovery Error:', error)
+      }
+    }
+    
+    // Fallback for demo mode
+    setDiscoveryState('paused')
+  }
+
+  // Resume discovery
+  const resumeDiscovery = async () => {
+    if (discoveryId) {
+      try {
+        const response = await fetch(`http://54.224.133.45:8812/discovery/${discoveryId}/resume`, {
+          method: 'POST'
+        })
+        
+        if (response.ok) {
+          setDiscoveryState('running')
+          pollDiscoveryStatus(discoveryId, 0) // Resume polling
+          return
+        }
+      } catch (error) {
+        console.error('Resume Discovery Error:', error)
+      }
+    }
+    
+    // Fallback for demo mode
+    setDiscoveryState('running')
+    if (steps.length > 0) {
+      const currentIndex = steps.findIndex(s => s.status === 'running' || (s.status === 'pending' && steps[steps.indexOf(s) - 1]?.status === 'completed'))
+      if (currentIndex >= 0) {
+        simulateDiscoveryProgress(steps, currentIndex)
+      }
+    }
+  }
+
+  // Initialize discovery when component becomes active
+  useEffect(() => {
+    if (isActive && discoveryState === 'starting' && query) {
+      startDiscovery()
+    }
+  }, [isActive, query])
+
+  // Update elapsed time
+  useEffect(() => {
+    if (discoveryState === 'running' && startTime) {
+      const interval = setInterval(() => {
+        setElapsedTime(Math.floor((Date.now() - startTime.getTime()) / 1000))
+      }, 1000)
+      
+      return () => clearInterval(interval)
+    }
+  }, [discoveryState, startTime])
 
   const formatElapsedTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60)
@@ -240,195 +473,159 @@ This analysis demonstrates high confidence based on convergent evidence from mul
                 )}>
                   {discoveryState.charAt(0).toUpperCase() + discoveryState.slice(1)}
                 </div>
-                {startTime && (
-                  <div className="text-sm text-muted-foreground">
-                    {formatElapsedTime(elapsedTime)}
-                  </div>
-                )}
+                <div className="text-sm text-muted-foreground">
+                  {formatElapsedTime(elapsedTime)}
+                </div>
               </div>
             </div>
+            <div className="text-lg font-medium text-muted-foreground">
+              "{query}"
+            </div>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            {discoveryState === 'running' && (
+              <Button onClick={pauseDiscovery} variant="outline" size="sm">
+                <Pause className="h-4 w-4 mr-2" />
+                Pause
+              </Button>
+            )}
             
+            {discoveryState === 'paused' && (
+              <Button onClick={resumeDiscovery} variant="outline" size="sm">
+                <Play className="h-4 w-4 mr-2" />
+                Resume
+              </Button>
+            )}
+            
+            <Button onClick={onToggle} variant="outline" size="sm">
+              <Square className="h-4 w-4 mr-2" />
+              Close
+            </Button>
+          </div>
+        </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
             <div className="flex items-center space-x-2">
-              {discoveryState === 'running' && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setDiscoveryState('paused')}
-                >
-                  <Pause className="h-4 w-4 mr-1" />
-                  Pause
-                </Button>
-              )}
-              {discoveryState === 'paused' && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setDiscoveryState('running')}
-                >
-                  <Play className="h-4 w-4 mr-1" />
-                  Resume
-                </Button>
-              )}
-              {discoveryState !== 'completed' && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setDiscoveryState('completed')}
-                >
-                  <Square className="h-4 w-4 mr-1" />
-                  Stop
-                </Button>
-              )}
+              <AlertCircle className="h-4 w-4 text-red-500" />
+              <span className="text-red-600 dark:text-red-400">{error}</span>
             </div>
           </div>
-          
-          <Button variant="ghost" onClick={onToggle}>
-            ✕
-          </Button>
-        </div>
+        )}
 
-        {/* Query Display */}
-        <div className="bg-muted/50 rounded-lg p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-medium mb-2 flex items-center">
-                <Target className="h-4 w-4 mr-2" />
-                Discovery Query:
-              </h3>
-              <p className="text-muted-foreground italic">"{query}"</p>
-            </div>
-            <div className="text-right">
-              <div className="text-sm text-muted-foreground">Discovery ID</div>
-              <div className="font-mono text-xs">{discoveryId}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Progress Overview */}
-        <div className="bg-card rounded-lg border p-4 mb-6">
-          <div className="grid grid-cols-4 gap-4 mb-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{completedSteps}</div>
-              <div className="text-xs text-muted-foreground">Steps Completed</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{filteredSources.length}</div>
-              <div className="text-xs text-muted-foreground">Sources Found</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">
-                {Math.round(discoveryProgress)}%
-              </div>
-              <div className="text-xs text-muted-foreground">Progress</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-orange-600">
-                {startTime ? formatElapsedTime(elapsedTime) : '0:00'}
-              </div>
-              <div className="text-xs text-muted-foreground">Elapsed Time</div>
-            </div>
-          </div>
-          
+        {/* Overall Progress */}
+        <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
-            <span className="font-medium">Overall Progress</span>
-            <span className="text-sm text-muted-foreground">
-              Step {currentStep} of {totalSteps}
-            </span>
+            <div className="text-sm font-medium">
+              Overall Progress: {completedSteps}/{totalSteps} steps completed
+            </div>
+            <div className="text-sm text-muted-foreground">
+              {Math.round(discoveryProgress)}%
+            </div>
           </div>
-          <Progress value={discoveryProgress} className="mb-2" />
-          <div className="text-xs text-muted-foreground">
-            {steps[currentStep - 1]?.name || 'Initializing...'}
-          </div>
+          <Progress value={discoveryProgress} className="h-2" />
         </div>
 
-        {/* Main Content */}
-        <div className="flex-1 grid grid-cols-2 gap-6 overflow-hidden">
-          {/* Activity Panel */}
-          <div className="bg-card rounded-lg border overflow-hidden flex flex-col">
-            <div className="p-4 border-b bg-muted/30">
-              <h3 className="font-semibold flex items-center">
-                <Activity className="h-5 w-5 mr-2" />
-                Discovery Activity
-              </h3>
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-hidden">
+          {/* Steps Panel */}
+          <div className="space-y-4 overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Discovery Steps</h3>
+              <div className="flex items-center space-x-2">
+                <label className="flex items-center space-x-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={webSearchEnabled}
+                    onChange={(e) => setWebSearchEnabled(e.target.checked)}
+                    className="rounded"
+                    disabled={discoveryState === 'running'}
+                  />
+                  <span>Web Search</span>
+                </label>
+                <label className="flex items-center space-x-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={knowledgeBaseEnabled}
+                    onChange={(e) => setKnowledgeBaseEnabled(e.target.checked)}
+                    className="rounded"
+                    disabled={discoveryState === 'running'}
+                  />
+                  <span>Knowledge Base</span>
+                </label>
+              </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
-              {steps.map((step, index) => (
+            <div className="space-y-3">
+              {steps.map((step) => (
                 <div
                   key={step.id}
                   className={cn(
-                    "border rounded-lg transition-all",
-                    step.status === 'running' ? "border-primary bg-primary/5" : 
-                    step.status === 'completed' ? "border-green-500/30 bg-green-500/10 dark:border-green-500/40 dark:bg-green-500/5" :
-                    "border-border"
+                    "border rounded-lg p-4 transition-colors",
+                    step.status === 'running' && "border-blue-500/50 bg-blue-500/5",
+                    step.status === 'completed' && "border-green-500/50 bg-green-500/5",
+                    step.status === 'error' && "border-red-500/50 bg-red-500/5"
                   )}
                 >
-                  <div 
-                    className="p-3 cursor-pointer"
+                  <div
+                    className="flex items-center justify-between cursor-pointer"
                     onClick={() => setExpandedStep(expandedStep === step.id ? 0 : step.id)}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        {getStepIcon(step)}
-                        <div>
-                          <h4 className="font-medium text-sm">{step.name}</h4>
-                          <p className="text-xs text-muted-foreground">
-                            {step.status === 'pending' ? 'Waiting to start...' :
-                             step.status === 'running' ? 'In progress...' :
-                             step.status === 'completed' ? 'Completed successfully' :
-                             step.status === 'error' ? 'Error occurred' : ''}
-                          </p>
+                    <div className="flex items-center space-x-3">
+                      {getStepTypeIcon(step.name)}
+                      <div>
+                        <div className="font-medium">{step.name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          Step {step.id}
                         </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        {step.status === 'running' && (
-                          <span className="text-xs text-primary font-medium">
-                            {step.progress}%
-                          </span>
-                        )}
-                        {expandedStep === step.id ? 
-                          <ChevronDown className="h-4 w-4" /> : 
-                          <ChevronRight className="h-4 w-4" />
-                        }
                       </div>
                     </div>
-                    
-                    {(step.status === 'running' || step.status === 'completed') && (
-                      <div className="mt-2">
-                        <Progress value={step.progress} className="h-1" />
-                      </div>
-                    )}
+                    <div className="flex items-center space-x-2">
+                      {getStepIcon(step)}
+                      {expandedStep === step.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </div>
                   </div>
                   
-                  {expandedStep === step.id && (
-                    <div className="border-t p-3 bg-muted/20 text-sm">
-                      <div className="space-y-2">
-                        <div>
-                          <span className="font-medium">Status: </span>
-                          <span className={cn(
-                            "capitalize",
-                            step.status === 'completed' && "text-green-600",
-                            step.status === 'running' && "text-blue-600",
-                            step.status === 'error' && "text-red-600"
-                          )}>
-                            {step.status}
-                          </span>
-                        </div>
-                        
-                        {step.result && (
-                          <div>
-                            <span className="font-medium">Result: </span>
-                            <p className="text-muted-foreground mt-1">{step.result}</p>
-                          </div>
-                        )}
-                        
-                        {step.error && (
-                          <div>
-                            <span className="font-medium text-red-600">Error: </span>
-                            <p className="text-red-600 mt-1">{step.error}</p>
-                          </div>
-                        )}
+                  {step.status !== 'pending' && (
+                    <div className="mt-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-muted-foreground">Progress</span>
+                        <span className="text-xs text-muted-foreground">{Math.round(step.progress)}%</span>
                       </div>
+                      <Progress value={step.progress} className="h-1" />
+                    </div>
+                  )}
+                  
+                  {expandedStep === step.id && (
+                    <div className="mt-3 pt-3 border-t">
+                      {step.result && (
+                        <div className="text-sm text-muted-foreground mb-2">
+                          {step.result}
+                        </div>
+                      )}
+                      
+                      {step.error && (
+                        <div className="text-sm text-red-600 dark:text-red-400 mb-2">
+                          Error: {step.error}
+                        </div>
+                      )}
+                      
+                      {step.sources && step.sources.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="text-xs font-medium text-muted-foreground">
+                            Sources Found: {step.sources.length}
+                          </div>
+                          {step.sources.slice(0, 3).map((source, idx) => (
+                            <div key={idx} className="text-xs p-2 bg-muted/50 rounded">
+                              <div className="font-medium">{source.title}</div>
+                              <div className="text-muted-foreground truncate">
+                                {source.excerpt}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -437,101 +634,63 @@ This analysis demonstrates high confidence based on convergent evidence from mul
           </div>
 
           {/* Sources Panel */}
-          <div className="bg-card rounded-lg border overflow-hidden flex flex-col">
-            <div className="p-4 border-b bg-muted/30">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-semibold flex items-center">
-                  <FileText className="h-5 w-5 mr-2" />
-                  Sources ({filteredSources.length})
-                </h3>
-                <Button variant="ghost" size="sm">
-                  <Eye className="h-4 w-4 mr-1" />
-                  View All
-                </Button>
-              </div>
-              
+          <div className="space-y-4 overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Sources Discovered</h3>
               <div className="flex items-center space-x-2">
                 <select
                   value={filterType}
                   onChange={(e) => setFilterType(e.target.value)}
-                  className="px-2 py-1 border rounded text-xs bg-background"
+                  className="text-sm border rounded px-2 py-1"
                 >
                   <option value="all">All Sources</option>
                   <option value="knowledge_base">Knowledge Base</option>
                   <option value="web_search">Web Search</option>
                   <option value="wikipedia">Wikipedia</option>
                   <option value="analysis">Analysis</option>
-                  <option value="report">Reports</option>
                 </select>
-                
-                <div className="flex space-x-1">
-                  {['knowledge_base', 'web_search', 'wikipedia'].map(type => (
-                    <div key={type} className="flex items-center space-x-1 text-xs">
-                      {getSourceIcon(type as any)}
-                      <span>{sources.filter(s => s.type === type).length}</span>
-                    </div>
-                  ))}
-                </div>
+                <Badge variant="outline">
+                  {filteredSources.length} sources
+                </Badge>
               </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <div className="space-y-3">
               {filteredSources.map((source, index) => (
-                <div
-                  key={source.id}
-                  className="p-4 border-b hover:bg-muted/30 transition-colors"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start space-x-3 flex-1">
+                <div key={index} className="border rounded-lg p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center space-x-2">
                       {getSourceIcon(source.type)}
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-sm truncate" title={source.title}>
-                          {source.title}
-                        </h4>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <span className="text-xs px-2 py-1 bg-muted rounded capitalize">
-                            {source.type.replace('_', ' ')}
-                          </span>
-                          <span className="text-xs text-green-600 font-medium">
-                            {Math.round(source.relevance * 100)}% match
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(source.timestamp).toLocaleTimeString()}
-                          </span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-2 line-clamp-3">
-                          {source.excerpt}
-                        </p>
-                        {source.url && (
-                          <a 
-                            href={source.url}
-                            className="text-xs text-primary hover:underline mt-1 flex items-center"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <ExternalLink className="h-3 w-3 mr-1" />
-                            View Source
+                      <div className="font-medium text-sm">{source.title}</div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Badge variant="outline" className="text-xs">
+                        {Math.round(source.relevance * 100)}%
+                      </Badge>
+                      {source.url && (
+                        <Button size="sm" variant="ghost" asChild>
+                          <a href={source.url} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="h-3 w-3" />
                           </a>
-                        )}
-                      </div>
+                        </Button>
+                      )}
                     </div>
-                    
-                    <div className="flex items-center space-x-1 ml-2">
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                        <Eye className="h-3 w-3" />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                        <Download className="h-3 w-3" />
-                      </Button>
-                    </div>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {source.excerpt}
                   </div>
                 </div>
               ))}
               
-              {filteredSources.length === 0 && (
-                <div className="p-8 text-center text-muted-foreground">
-                  <Search className="h-8 w-8 mx-auto mb-2" />
-                  <p>No sources found for the selected filter.</p>
+              {filteredSources.length === 0 && sources.length > 0 && (
+                <div className="text-center text-muted-foreground py-8">
+                  No sources match the current filter.
+                </div>
+              )}
+              
+              {sources.length === 0 && discoveryState !== 'starting' && (
+                <div className="text-center text-muted-foreground py-8">
+                  {discoveryState === 'running' ? 'Discovering sources...' : 'No sources found yet.'}
                 </div>
               )}
             </div>
@@ -539,45 +698,20 @@ This analysis demonstrates high confidence based on convergent evidence from mul
         </div>
 
         {/* Final Report */}
-        {discoveryState === 'completed' && finalReport && (
-          <div className="mt-6 bg-green-500/10 border border-green-500/30 dark:bg-green-500/5 dark:border-green-500/40 rounded-lg p-4">
+        {finalReport && (
+          <div className="mt-6 border rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-green-600 dark:text-green-400 flex items-center">
-                <CheckCircle className="h-5 w-5 mr-2" />
-                Discovery Complete
-              </h3>
-              <Button size="sm" className="bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700">
+              <h3 className="text-lg font-semibold">Final Report</h3>
+              <Button size="sm" variant="outline">
                 <Download className="h-4 w-4 mr-2" />
-                Download Full Report
+                Download
               </Button>
             </div>
-            <div className="text-sm text-green-600 dark:text-green-400">
-              Comprehensive analysis completed with {sources.length} sources analyzed across {totalSteps} research phases.
-              <button className="text-green-700 dark:text-green-300 hover:underline ml-2">
-                Preview Report →
-              </button>
+            <div className="prose prose-sm max-w-none text-sm">
+              <pre className="whitespace-pre-wrap text-sm">{finalReport}</pre>
             </div>
           </div>
         )}
-
-        {/* Footer Actions */}
-        <div className="flex items-center justify-between mt-6 pt-4 border-t">
-          <div className="text-sm text-muted-foreground">
-            Discovery {discoveryId?.substring(5)} • {Math.round(discoveryProgress)}% complete • {sources.length} sources found
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            {discoveryState === 'completed' && (
-              <Button>
-                <Download className="h-4 w-4 mr-2" />
-                Export Results
-              </Button>
-            )}
-            <Button variant="outline" onClick={onToggle}>
-              Return to Chat
-            </Button>
-          </div>
-        </div>
       </div>
     </div>
   )

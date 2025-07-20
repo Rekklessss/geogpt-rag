@@ -65,11 +65,11 @@ def llm_generate(prompt):
         
         # Return just the response text for backward compatibility
         return result["response"]
-        
-    except Exception as e:
-        logging.error(f"LLM generate error: {e}")
+            
+        except Exception as e:
+            logging.error(f"LLM generate error: {e}")
         # Return empty string for backward compatibility
-        return ""
+    return ""
 
 
 class KBDocQA:

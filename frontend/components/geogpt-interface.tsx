@@ -5,6 +5,8 @@ import { FileLibrary } from './file-library'
 import { ChatInterface } from './chat-interface'
 import { Header } from './header'
 import { StatusMonitor } from './status-monitor'
+import { LLMProviderManager } from './llm-provider-manager'
+import { ConfigurationManager } from './configuration-manager'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 
@@ -16,7 +18,34 @@ export function GeoGPTInterface({ className }: GeoGPTInterfaceProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])
   const [statusMonitorOpen, setStatusMonitorOpen] = useState(false)
+  const [llmManagerOpen, setLlmManagerOpen] = useState(false)
+  const [configManagerOpen, setConfigManagerOpen] = useState(false)
   const { toast } = useToast()
+
+  // Close other panels when opening a new one
+  const handleToggleLLMManager = () => {
+    setLlmManagerOpen(!llmManagerOpen)
+    if (!llmManagerOpen) {
+      setStatusMonitorOpen(false)
+      setConfigManagerOpen(false)
+    }
+  }
+
+  const handleToggleConfig = () => {
+    setConfigManagerOpen(!configManagerOpen)
+    if (!configManagerOpen) {
+      setStatusMonitorOpen(false)
+      setLlmManagerOpen(false)
+    }
+  }
+
+  const handleToggleStatus = () => {
+    setStatusMonitorOpen(!statusMonitorOpen)
+    if (!statusMonitorOpen) {
+      setLlmManagerOpen(false)
+      setConfigManagerOpen(false)
+    }
+  }
 
   return (
     <div className={cn("flex h-screen bg-background", className)}>
@@ -24,7 +53,9 @@ export function GeoGPTInterface({ className }: GeoGPTInterfaceProps) {
       <Header 
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
         sidebarOpen={sidebarOpen}
-        onToggleStatus={() => setStatusMonitorOpen(!statusMonitorOpen)}
+        onToggleStatus={handleToggleStatus}
+        onToggleLLMManager={handleToggleLLMManager}
+        onToggleConfig={handleToggleConfig}
       />
       
       {/* Main Content */}
@@ -69,11 +100,53 @@ export function GeoGPTInterface({ className }: GeoGPTInterfaceProps) {
         </div>
       </div>
       
+      {/* Right Side Management Panels */}
+      
       {/* Status Monitor Sidebar */}
       <StatusMonitor
         isVisible={statusMonitorOpen}
         onToggle={() => setStatusMonitorOpen(false)}
       />
+
+      {/* LLM Provider Manager Sidebar */}
+      {llmManagerOpen && (
+        <div className="w-96 bg-card border-l border-border overflow-y-auto">
+          <div className="p-4 border-b">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">LLM Providers</h2>
+              <button
+                onClick={() => setLlmManagerOpen(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+          <div className="p-4">
+            <LLMProviderManager />
+          </div>
+        </div>
+      )}
+
+      {/* Configuration Manager Sidebar */}
+      {configManagerOpen && (
+        <div className="w-96 bg-card border-l border-border overflow-y-auto">
+          <div className="p-4 border-b">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Configuration</h2>
+              <button
+                onClick={() => setConfigManagerOpen(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+          <div className="p-4">
+            <ConfigurationManager />
+          </div>
+        </div>
+      )}
     </div>
   )
 } 

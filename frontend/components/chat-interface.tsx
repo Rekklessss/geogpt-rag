@@ -28,8 +28,6 @@ import type { ChatMessage, DocumentSource } from '@/types'
 import { DeepDiscovery } from './deep-discovery'
 import { EnhancedChatInput } from './enhanced-chat-input'
 import { CodeExecution } from './code-execution'
-import { chatService, handleApiError } from '@/lib/api'
-import { mockChatMessages, generateMockChatResponse } from '@/lib/mock-data'
 
 interface ChatInterfaceProps {
   selectedFiles: string[]
@@ -38,8 +36,41 @@ interface ChatInterfaceProps {
   className?: string
 }
 
+interface ChatApiRequest {
+  message: string
+  context_files?: string[]
+  include_thinking?: boolean
+  include_sources?: boolean
+  use_web_search?: boolean
+  max_context_length?: number
+  conversation_id?: string
+}
+
+interface ChatApiResponse {
+  response: string
+  thinking?: string | null
+  sources?: Array<{
+    title: string
+    excerpt: string
+    relevance: number
+    type: string
+    url?: string
+  }> | null
+  processing_time: number
+  tokens: {
+    input: number
+    output: number
+    total: number
+  }
+  metadata: {
+    context_length: number
+    sources_used: number
+    web_search_used: boolean
+  }
+}
+
 export function ChatInterface({ selectedFiles, onFileDeselect, onFileAttach, className }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>(mockChatMessages)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [inputValue, setInputValue] = useState('')
   const [isThinking, setIsThinking] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
@@ -49,6 +80,7 @@ export function ChatInterface({ selectedFiles, onFileDeselect, onFileAttach, cla
   const [discoveryQuery, setDiscoveryQuery] = useState('')
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
   const [executingCode, setExecutingCode] = useState<Set<string>>(new Set())
+  const [conversationId] = useState(() => `chat_${Date.now()}`)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -78,16 +110,35 @@ export function ChatInterface({ selectedFiles, onFileDeselect, onFileAttach, cla
     setIsThinking(true)
 
     try {
-      // Simulate thinking delay
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      
-      // Generate mock response
-      const mockResponse = generateMockChatResponse(currentInput)
+      // Call real chat API
+      const requestBody: ChatApiRequest = {
+        message: currentInput,
+        context_files: selectedFiles,
+        include_thinking: true,
+        include_sources: true,
+        use_web_search: webSearchEnabled,
+        max_context_length: 4000,
+        conversation_id: conversationId
+      }
+
+      const response = await fetch('http://54.224.133.45:8812/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      })
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status} ${response.statusText}`)
+      }
+
+      const data: ChatApiResponse = await response.json()
       
       setIsThinking(false)
       
       // Add thinking message if available
-      if (mockResponse.thinking) {
+      if (data.thinking && data.thinking.trim()) {
         const thinkingMessage: ChatMessage = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
@@ -95,38 +146,36 @@ export function ChatInterface({ selectedFiles, onFileDeselect, onFileAttach, cla
           timestamp: new Date(),
           type: 'thinking',
           metadata: {
-            thinking: mockResponse.thinking,
-            sources: mockResponse.sources?.map(source => ({
+            thinking: data.thinking,
+            sources: data.sources?.map(source => ({
               filename: source.title,
               relevanceScore: source.relevance,
               excerpt: source.excerpt,
-              pageNumber: Math.floor(Math.random() * 200) + 1,
-              type: source.type,
+              pageNumber: 1, // Backend doesn't provide page numbers yet
+              type: (source.type as 'knowledge_base' | 'web_search' | 'wikipedia' | 'analysis' | 'report') || 'knowledge_base',
               url: source.url
             }))
           }
         }
         setMessages(prev => [...prev, thinkingMessage])
-        
-        // Simulate processing delay
-        await new Promise(resolve => setTimeout(resolve, 2000))
       }
       
+      // Add main response message
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 2).toString(),
         role: 'assistant',
-        content: mockResponse.response,
+        content: data.response,
         timestamp: new Date(),
         type: 'text',
         metadata: {
-          processingTime: mockResponse.processingTime,
-          tokens: mockResponse.tokens?.total || 0,
-          sources: mockResponse.sources?.map(source => ({
+          processingTime: data.processing_time,
+          tokens: data.tokens.total,
+          sources: data.sources?.map(source => ({
             filename: source.title,
             relevanceScore: source.relevance,
             excerpt: source.excerpt,
-            pageNumber: Math.floor(Math.random() * 200) + 1,
-            type: source.type,
+            pageNumber: 1,
+            type: (source.type as 'knowledge_base' | 'web_search' | 'wikipedia' | 'analysis' | 'report') || 'knowledge_base',
             url: source.url
           }))
         }
@@ -134,32 +183,42 @@ export function ChatInterface({ selectedFiles, onFileDeselect, onFileAttach, cla
       
       setMessages(prev => [...prev, assistantMessage])
       
-      // If the query seems code-related, add a code example
-      if (currentInput.toLowerCase().includes('code') || currentInput.toLowerCase().includes('python') || currentInput.toLowerCase().includes('analysis')) {
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        
-        const codeMessage: ChatMessage = {
-          id: (Date.now() + 3).toString(),
-          role: 'assistant',
-          content: 'Here\'s a Python implementation for this analysis:',
-          timestamp: new Date(),
-          type: 'code',
-          metadata: {
-            code: generateSampleCode(currentInput),
-            codeLanguage: 'python'
+      // Auto-generate code if the response suggests it
+      if (data.response.toLowerCase().includes('```') || data.response.toLowerCase().includes('python') || data.response.toLowerCase().includes('code')) {
+        // Extract code blocks from the response
+        const codeBlocks = data.response.match(/```[\s\S]*?```/g)
+        if (codeBlocks && codeBlocks.length > 0) {
+          const codeContent = codeBlocks[0]
+            .replace(/```python\n?/g, '')
+            .replace(/```\n?/g, '')
+            .trim()
+          
+          if (codeContent) {
+            const codeMessage: ChatMessage = {
+              id: (Date.now() + 3).toString(),
+              role: 'assistant',
+              content: 'Here\'s the code from my response:',
+              timestamp: new Date(),
+              type: 'code',
+              metadata: {
+                code: codeContent,
+                codeLanguage: 'python'
+              }
+            }
+            
+            setMessages(prev => [...prev, codeMessage])
           }
         }
-        
-        setMessages(prev => [...prev, codeMessage])
       }
       
     } catch (error) {
       setIsThinking(false)
+      console.error('Chat API Error:', error)
       
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `I apologize, but I encountered an error while processing your request: ${handleApiError(error)}. Please try again or rephrase your question.`,
+        content: `I apologize, but I encountered an error while processing your request: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or check if the backend service is running.`,
         timestamp: new Date(),
         type: 'text'
       }

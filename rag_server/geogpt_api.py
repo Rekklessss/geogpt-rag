@@ -152,16 +152,21 @@ async def health_check():
     """Comprehensive health check for all services"""
     services = {}
     
+    # Get configuration for correct IP addresses
+    config = get_instance_config() if 'get_instance_config' in globals() else None
+    
     # Check embedding service
     try:
-        response = requests.get("http://localhost:8810/health", timeout=5)
+        embedding_url = f"http://{config.ec2_instance_ip}:8810/health" if config else "http://54.224.133.45:8810/health"
+        response = requests.get(embedding_url, timeout=5)
         services["embedding"] = "online" if response.status_code == 200 else "offline"
     except:
         services["embedding"] = "offline"
     
     # Check reranking service
     try:
-        response = requests.get("http://localhost:8811/health", timeout=5)
+        reranking_url = f"http://{config.ec2_instance_ip}:8811/health" if config else "http://54.224.133.45:8811/health"
+        response = requests.get(reranking_url, timeout=5)
         services["reranking"] = "online" if response.status_code == 200 else "offline"
     except:
         services["reranking"] = "offline"

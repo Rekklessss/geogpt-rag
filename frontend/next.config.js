@@ -4,45 +4,12 @@ const nextConfig = {
     appDir: true,
   },
   
-  // API proxy configuration for RAG pipeline
-  async rewrites() {
-    // Get API host from environment variable, fallback to hardcoded IP
-    const apiHost = process.env.NEXT_PUBLIC_API_HOST || '54.224.133.45'
-    const apiProtocol = process.env.NEXT_PUBLIC_API_PROTOCOL || 'https'
-    const embeddingPort = process.env.NEXT_PUBLIC_EMBEDDING_PORT || '8810'
-    const rerankingPort = process.env.NEXT_PUBLIC_RERANKING_PORT || '8811' 
-    const geogptPort = process.env.NEXT_PUBLIC_GEOGPT_PORT || '8812'
-    
-    return {
-      beforeFiles: [
-        // Proxy RAG API requests to avoid CORS in development
-        {
-          source: '/api/embedding/:path*',
-          destination: process.env.NODE_ENV === 'production' 
-            ? `${apiProtocol}://${apiHost}:${embeddingPort}/:path*`
-            : `http://localhost:${embeddingPort}/:path*`
-        },
-        {
-          source: '/api/reranking/:path*',
-          destination: process.env.NODE_ENV === 'production'
-            ? `${apiProtocol}://${apiHost}:${rerankingPort}/:path*` 
-            : `http://localhost:${rerankingPort}/:path*`
-        },
-        {
-          source: '/api/geogpt/:path*',
-          destination: process.env.NODE_ENV === 'production'
-            ? `${apiProtocol}://${apiHost}:${geogptPort}/:path*`
-            : `http://localhost:${geogptPort}/:path*`
-        }
-      ]
-    }
-  },
+  // NO PROXY REWRITES - Direct connection to EC2
+  // Removed all rewrites to force direct API calls to EC2
   
-  // Environment variables for API endpoints
+  // Environment variables for API endpoints - ALWAYS use EC2 IP
   env: {
-    NEXT_PUBLIC_API_BASE_URL: process.env.NODE_ENV === 'production' 
-      ? `${process.env.NEXT_PUBLIC_API_PROTOCOL || 'https'}://${process.env.NEXT_PUBLIC_API_HOST || '54.224.133.45'}`
-      : 'http://localhost',
+    NEXT_PUBLIC_API_BASE_URL: `http://${process.env.NEXT_PUBLIC_API_HOST || '54.224.133.45'}`,
     NEXT_PUBLIC_EMBEDDING_PORT: process.env.NEXT_PUBLIC_EMBEDDING_PORT || '8810',
     NEXT_PUBLIC_RERANKING_PORT: process.env.NEXT_PUBLIC_RERANKING_PORT || '8811',
     NEXT_PUBLIC_GEOGPT_PORT: process.env.NEXT_PUBLIC_GEOGPT_PORT || '8812'

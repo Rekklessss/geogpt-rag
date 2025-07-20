@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useEffect, useState } from 'react'
-import { Menu, Settings, Moon, Sun, Monitor, Activity, Wifi, WifiOff, AlertTriangle } from 'lucide-react'
+import { Menu, Settings, Moon, Sun, Monitor, Activity, Wifi, WifiOff, AlertTriangle, Zap, Server } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -10,10 +10,19 @@ interface HeaderProps {
   onToggleSidebar: () => void
   sidebarOpen: boolean
   onToggleStatus?: () => void
+  onToggleLLMManager?: () => void
+  onToggleConfig?: () => void
   className?: string
 }
 
-export function Header({ onToggleSidebar, sidebarOpen, onToggleStatus, className }: HeaderProps) {
+export function Header({ 
+  onToggleSidebar, 
+  sidebarOpen, 
+  onToggleStatus, 
+  onToggleLLMManager,
+  onToggleConfig,
+  className 
+}: HeaderProps) {
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const [systemStatus, setSystemStatus] = useState<'online' | 'degraded' | 'offline'>('online')
@@ -21,6 +30,27 @@ export function Header({ onToggleSidebar, sidebarOpen, onToggleStatus, className
   // Prevent hydration mismatch by only rendering theme-dependent content after mount
   useEffect(() => {
     setMounted(true)
+  }, [])
+
+  // Check system status periodically
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const response = await fetch('http://54.224.133.45:8812/health')
+        if (response.ok) {
+          const data = await response.json()
+          setSystemStatus(data.status || 'online')
+        } else {
+          setSystemStatus('offline')
+        }
+      } catch (error) {
+        setSystemStatus('offline')
+      }
+    }
+
+    checkStatus()
+    const interval = setInterval(checkStatus, 30000) // Check every 30 seconds
+    return () => clearInterval(interval)
   }, [])
 
   const toggleTheme = () => {
@@ -96,12 +126,36 @@ export function Header({ onToggleSidebar, sidebarOpen, onToggleStatus, className
           </div>
           
           <div className="text-xs text-muted-foreground">
-            5 services • 99.8% uptime
+            EC2: 54.224.133.45
           </div>
         </div>
 
-        {/* Right side - Status monitor, Theme toggle and Settings */}
+        {/* Right side - Management buttons, Status monitor, Theme toggle and Settings */}
         <div className="flex items-center space-x-2">
+          {onToggleLLMManager && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onToggleLLMManager}
+              className="hover:bg-accent"
+              title="LLM Provider Manager"
+            >
+              <Zap className="h-5 w-5" />
+            </Button>
+          )}
+          
+          {onToggleConfig && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onToggleConfig}
+              className="hover:bg-accent"
+              title="Configuration Manager"
+            >
+              <Server className="h-5 w-5" />
+            </Button>
+          )}
+          
           <Button
             variant="ghost"
             size="icon"

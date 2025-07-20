@@ -158,10 +158,10 @@ class InstanceConfigManager:
         """Check health of configured services"""
         health_status = {}
         
+        # Only check external services, not the main API itself
         urls_to_check = {
             "embedding": f"{self.config.embedding_url}/health",
-            "reranking": f"{self.config.reranking_url}/health",
-            "main_api": f"{self.config.api_base_url}/health"
+            "reranking": f"{self.config.reranking_url}/health"
         }
         
         for service, url in urls_to_check.items():
@@ -178,6 +178,13 @@ class InstanceConfigManager:
                     "error": str(e),
                     "url": url
                 }
+        
+        # For main API, just report that it's running (since we're in it)
+        health_status["main_api"] = {
+            "status": "healthy",
+            "response_code": 200,
+            "url": f"{self.config.api_base_url}/health"
+        }
         
         return health_status
     
