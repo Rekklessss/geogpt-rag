@@ -14,9 +14,15 @@ import shutil
 import uuid
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Union
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import asyncio
+import tempfile
+import shutil
+import json
+import os
+import time
 import uvicorn
 import requests
 from bs4 import BeautifulSoup
@@ -24,7 +30,7 @@ import wikipedia
 from duckduckgo_search import DDGS
 
 from geo_kb import KBDocQA, llm_generate
-from config import RAG_PROMPT
+from config import RAG_PROMPT, COLLECTION_NAME, CHUNK_PATH_NAME
 
 # Configure logging FIRST
 logging.basicConfig(
@@ -474,6 +480,317 @@ async def get_execution_status(execution_id: str):
         execution_time=execution.get("execution_time"),
         exit_code=execution.get("exit_code")
     )
+
+@app.get("/kb/stats")
+async def get_knowledge_base_stats():
+    """Get knowledge base statistics and status"""
+    if not kb_system:
+        raise HTTPException(status_code=503, detail="Knowledge base system not available")
+    
+    try:
+        # Get collection info
+        collection = kb_system.vector_store.col
+        if collection:
+            # Get basic stats
+            num_entities = collection.num_entities
+            collection_name = collection.name
+        else:
+            num_entities = 0
+            collection_name = "geo-embedding" # Assuming a default name if not set
+        
+        # Scan chunk files to get file count and total size
+        chunk_files = []
+        total_size = 0
+        total_chunks = 0
+        
+        if os.path.exists(CHUNK_PATH_NAME):
+            for filename in os.listdir(CHUNK_PATH_NAME):
+                if filename.endswith('.jsonl'):
+                    file_path = os.path.join(CHUNK_PATH_NAME, filename)
+                    file_size = os.path.getsize(file_path)
+                    total_size += file_size
+                    
+                    # Count chunks in file
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        chunk_count = sum(1 for _ in f)
+                        total_chunks += chunk_count
+                    
+                    chunk_files.append({
+                        'filename': filename,
+                        'size': file_size,
+                        'chunks': chunk_count
+                    })
+        
+        return {
+            "total_files": len(chunk_files),
+            "total_chunks": total_chunks,
+            "total_size": total_size,
+            "index_status": "healthy" if collection and num_entities > 0 else "degraded",
+            "last_updated": datetime.now().isoformat(),
+            "embedding_model": "geo-embedding",
+            "collection_name": collection_name,
+            "vector_count": num_entities
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting KB stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/kb/files")
+async def get_knowledge_base_files():
+    """Get list of files in knowledge base"""
+    if not kb_system:
+        raise HTTPException(status_code=503, detail="Knowledge base system not available")
+    
+    try:
+        files = []
+        
+        if os.path.exists(CHUNK_PATH_NAME):
+            for filename in os.listdir(CHUNK_PATH_NAME):
+                if filename.endswith('.jsonl'):
+                    file_path = os.path.join(CHUNK_PATH_NAME, filename)
+                    file_stat = os.stat(file_path)
+                    
+                    # Count chunks and get metadata from first chunk
+                    chunk_count = 0
+                    first_chunk = None
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            for line in f:
+                                if line.strip():
+                                    chunk_data = json.loads(line)
+                                    if first_chunk is None:
+                                        first_chunk = chunk_data
+                                    chunk_count += 1
+                    except Exception as e:
+                        logger.error(f"Error reading chunk file {filename}: {e}")
+                        continue
+                    
+                    # Extract original filename from chunk data
+                    original_filename = filename.replace('.jsonl', '')
+                    if first_chunk and 'filename' in first_chunk:
+                        original_filename = first_chunk['filename']
+                    
+                    files.append({
+                        "id": filename.replace('.jsonl', ''),
+                        "filename": original_filename,
+                        "path": file_path,
+                        "size": file_stat.st_size,
+                        "upload_date": datetime.fromtimestamp(file_stat.st_mtime).isoformat(),
+                        "status": "ready",
+                        "chunk_count": chunk_count,
+                        "metadata": {
+                            "file_type": first_chunk.get('file_type', 'unknown') if first_chunk else 'unknown',
+                            "embedding_model": "geo-embedding",
+                            "last_accessed": datetime.fromtimestamp(file_stat.st_atime).isoformat()
+                        }
+                    })
+        
+        # Sort by upload date (newest first)
+        files.sort(key=lambda x: x['upload_date'], reverse=True)
+        
+        return {"files": files}
+        
+    except Exception as e:
+        logger.error(f"Error getting KB files: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/kb/upload")
+async def upload_file_to_knowledge_base(file: UploadFile = File(...), max_size: int = Form(512)):
+    """Upload and process a file into the knowledge base"""
+    if not kb_system:
+        raise HTTPException(status_code=503, detail="Knowledge base system not available")
+    
+    # Validate file type
+    allowed_extensions = {'.pdf', '.docx', '.doc', '.txt', '.md'}
+    file_ext = os.path.splitext(file.filename or '')[1].lower()
+    if file_ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"File type {file_ext} not supported. Allowed: {', '.join(allowed_extensions)}"
+        )
+    
+    # Validate file size (100MB limit)
+    max_file_size = 100 * 1024 * 1024  # 100MB
+    
+    try:
+        # Create temporary file
+        temp_dir = tempfile.mkdtemp()
+        temp_file_path = os.path.join(temp_dir, file.filename or 'uploaded_file')
+        
+        # Save uploaded file
+        content = await file.read()
+        if len(content) > max_file_size:
+            raise HTTPException(status_code=400, detail="File too large (max 100MB)")
+        
+        with open(temp_file_path, 'wb') as f:
+            f.write(content)
+        
+        # Process file in background
+        file_id = f"{int(time.time())}_{file.filename}"
+        
+        # Start processing task
+        asyncio.create_task(process_file_async(temp_file_path, file_id, max_size))
+        
+        return {
+            "file_id": file_id,
+            "filename": file.filename,
+            "status": "processing",
+            "message": "File upload successful, processing started"
+        }
+        
+    except Exception as e:
+        # Clean up temp file
+        if 'temp_dir' in locals() and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        
+        logger.error(f"Error uploading file: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def process_file_async(file_path: str, file_id: str, max_size: int):
+    """Process file asynchronously"""
+    try:
+        # Update processing status
+        processing_status[file_id] = {
+            "file_id": file_id,
+            "stage": "chunking",
+            "progress": 25
+        }
+        
+        # Add file to knowledge base
+        kb_system.add_file(file_path, max_size)
+        
+        # Update processing status
+        processing_status[file_id] = {
+            "file_id": file_id,
+            "stage": "completed",
+            "progress": 100
+        }
+        
+        logger.info(f"Successfully processed file: {file_id}")
+        
+    except Exception as e:
+        logger.error(f"Error processing file {file_id}: {e}")
+        processing_status[file_id] = {
+            "file_id": file_id,
+            "stage": "error",
+            "progress": 0,
+            "error_message": str(e)
+        }
+    finally:
+        # Clean up temp file
+        if os.path.exists(file_path):
+            temp_dir = os.path.dirname(file_path)
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+@app.get("/kb/status/{file_id}")
+async def get_processing_status(file_id: str):
+    """Get processing status for a file"""
+    if file_id not in processing_status:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    return processing_status[file_id]
+
+@app.delete("/kb/files/{file_id}")
+async def delete_knowledge_base_file(file_id: str):
+    """Delete a file from the knowledge base"""
+    if not kb_system:
+        raise HTTPException(status_code=503, detail="Knowledge base system not available")
+    
+    try:
+        # Find and delete chunk file
+        chunk_file_path = os.path.join(CHUNK_PATH_NAME, f"{file_id}.jsonl")
+        
+        if not os.path.exists(chunk_file_path):
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        # Read chunks to get their IDs for vector store deletion
+        chunk_ids = []
+        try:
+            with open(chunk_file_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip():
+                        chunk_data = json.loads(line)
+                        # Note: Milvus auto-generates IDs, so we can't delete specific chunks easily
+                        # For now, we'll just delete the file and recommend rebuilding the index
+        except Exception as e:
+            logger.warning(f"Could not read chunk file for deletion: {e}")
+        
+        # Delete the chunk file
+        os.remove(chunk_file_path)
+        
+        logger.info(f"Deleted file: {file_id}")
+        
+        return {
+            "success": True,
+            "message": f"File {file_id} deleted successfully",
+            "recommendation": "Consider rebuilding the index to remove vector embeddings"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error deleting file {file_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/kb/rebuild")
+async def rebuild_knowledge_base():
+    """Rebuild the entire knowledge base index"""
+    if not kb_system:
+        raise HTTPException(status_code=503, detail="Knowledge base system not available")
+    
+    try:
+        # Drop existing collection
+        kb_system.drop_collection()
+        
+        # Recreate vector store
+        kb_system.vector_store = Milvus(
+            embedding_function=kb_system.embeddings,
+            collection_name=kb_system.collection_name,
+            connection_args=kb_system.milvus_connection_args,
+            index_params={
+                "metric_type": "COSINE",
+                "index_type": "HNSW",
+                "params": {"M": 8, "efConstruction": 64},
+            },
+            drop_old=True,
+            auto_id=True
+        )
+        
+        # Re-add all files from chunk directory
+        if os.path.exists(CHUNK_PATH_NAME):
+            for filename in os.listdir(CHUNK_PATH_NAME):
+                if filename.endswith('.jsonl'):
+                    chunk_file_path = os.path.join(CHUNK_PATH_NAME, filename)
+                    
+                    # Read chunks and add to vector store
+                    texts = []
+                    metadatas = []
+                    
+                    with open(chunk_file_path, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            if line.strip():
+                                chunk_data = json.loads(line)
+                                texts.append(chunk_data['text'])
+                                
+                                # Prepare metadata (remove text field)
+                                metadata = {k: v for k, v in chunk_data.items() if k != 'text'}
+                                metadatas.append(metadata)
+                    
+                    if texts:
+                        kb_system.vector_store.add_texts(texts, metadatas=metadatas)
+        
+        logger.info("Successfully rebuilt knowledge base index")
+        
+        return {
+            "success": True,
+            "message": "Knowledge base index rebuilt successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error rebuilding knowledge base: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Global processing status tracker
+processing_status = {}
 
 # Helper Functions
 

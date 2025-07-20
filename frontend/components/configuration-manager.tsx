@@ -151,7 +151,7 @@ export function ConfigurationManager() {
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">Instance IP</label>
+                <label className="text-sm font-medium text-foreground">Instance IP</label>
                 {editMode ? (
                   <Input
                     value={editConfig.ec2_instance_ip || ''}
@@ -160,32 +160,33 @@ export function ConfigurationManager() {
                       ec2_instance_ip: e.target.value
                     })}
                     placeholder="e.g., 54.224.133.45"
+                    className="bg-background border-input"
                   />
                 ) : (
-                  <p className="text-sm bg-gray-50 p-2 rounded">{instanceConfig.ec2_instance_ip}</p>
+                  <p className="text-sm bg-muted p-2 rounded text-foreground">{instanceConfig.ec2_instance_ip}</p>
                 )}
               </div>
               <div>
-                <label className="text-sm font-medium">API Base URL</label>
-                <p className="text-sm bg-gray-50 p-2 rounded">{instanceConfig.api_base_url}</p>
+                <label className="text-sm font-medium text-foreground">API Base URL</label>
+                <p className="text-sm bg-muted p-2 rounded text-foreground">{instanceConfig.api_base_url}</p>
               </div>
               <div>
-                <label className="text-sm font-medium">Embedding URL</label>
-                <p className="text-sm bg-gray-50 p-2 rounded">{instanceConfig.embedding_url}</p>
+                <label className="text-sm font-medium text-foreground">Embedding URL</label>
+                <p className="text-sm bg-muted p-2 rounded text-foreground">{instanceConfig.embedding_url}</p>
               </div>
               <div>
-                <label className="text-sm font-medium">Reranking URL</label>
-                <p className="text-sm bg-gray-50 p-2 rounded">{instanceConfig.reranking_url}</p>
+                <label className="text-sm font-medium text-foreground">Reranking URL</label>
+                <p className="text-sm bg-muted p-2 rounded text-foreground">{instanceConfig.reranking_url}</p>
               </div>
             </div>
           </div>
 
           {/* Service Ports */}
           <div className="space-y-3">
-            <h3 className="font-semibold">Service Ports & Health</h3>
+            <h3 className="font-semibold text-foreground">Service Ports & Health</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="text-sm font-medium">Embedding Service</label>
+                <label className="text-sm font-medium text-foreground">Embedding Service</label>
                 {editMode ? (
                   <Input
                     type="number"
@@ -197,12 +198,13 @@ export function ConfigurationManager() {
                         embedding: parseInt(e.target.value)
                       }
                     })}
+                    className="bg-background border-input"
                   />
                 ) : (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary">{instanceConfig.ports.embedding}</Badge>
-                      <span className="text-xs text-gray-500">Embedding API</span>
+                      <span className="text-xs text-muted-foreground">Embedding API</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge 
@@ -216,7 +218,7 @@ export function ConfigurationManager() {
                 )}
               </div>
               <div>
-                <label className="text-sm font-medium">Reranking Service</label>
+                <label className="text-sm font-medium text-foreground">Reranking Service</label>
                 {editMode ? (
                   <Input
                     type="number"
@@ -228,12 +230,13 @@ export function ConfigurationManager() {
                         reranking: parseInt(e.target.value)
                       }
                     })}
+                    className="bg-background border-input"
                   />
                 ) : (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary">{instanceConfig.ports.reranking}</Badge>
-                      <span className="text-xs text-gray-500">Reranking API</span>
+                      <span className="text-xs text-muted-foreground">Reranking API</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge 
@@ -247,7 +250,7 @@ export function ConfigurationManager() {
                 )}
               </div>
               <div>
-                <label className="text-sm font-medium">Main API</label>
+                <label className="text-sm font-medium text-foreground">Main API</label>
                 {editMode ? (
                   <Input
                     type="number"
@@ -259,12 +262,13 @@ export function ConfigurationManager() {
                         main_api: parseInt(e.target.value)
                       }
                     })}
+                    className="bg-background border-input"
                   />
                 ) : (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <Badge variant="default">{instanceConfig.ports.main_api}</Badge>
-                      <span className="text-xs text-gray-500">GeoGPT API</span>
+                      <span className="text-xs text-muted-foreground">GeoGPT API</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge 
@@ -280,29 +284,7 @@ export function ConfigurationManager() {
             </div>
           </div>
 
-          {/* Service Health Details */}
-          <div className="space-y-3">
-            <h3 className="font-semibold">Service Health Details</h3>
-            <div className="space-y-2">
-              {Object.entries(serviceHealth).map(([service, health]) => (
-                <div key={service} className="bg-gray-50 p-3 rounded">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium capitalize">{service} Service</span>
-                    <Badge 
-                      variant={health.status === 'healthy' ? 'default' : 'destructive'}
-                      className="text-xs"
-                    >
-                      {health.status}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-gray-600">{health.url}</p>
-                  {health.error && (
-                    <p className="text-xs text-red-600 mt-1">{health.error}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+        
 
           {editMode && (
             <div className="flex gap-2 pt-4 border-t">

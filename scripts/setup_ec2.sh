@@ -19,8 +19,7 @@ set -e
 REPO_URL="https://github.com/Rekklessss/geogpt-rag.git"
 PROJECT_DIR="$HOME/geogpt-rag"
 
-# Production configuration - Updated with current instance details
-PRODUCTION_EC2_IP="54.224.133.45"
+# Production configuration - Updated with current instance detailsPRODUCTION_EC2_IP="54.224.133.45"
 PRODUCTION_EC2_ID="i-0cf221c2fca3cb3cf"
 OPENAI_API_KEY="${OPENAI_API_KEY:-YOUR_OPENAI_API_KEY_HERE}"
 ZILLIZ_CLOUD_URI="https://in03-088dd53cf6b3582.serverless.gcp-us-west1.cloud.zilliz.com"

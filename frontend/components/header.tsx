@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useEffect, useState } from 'react'
-import { Menu, Settings, Moon, Sun, Monitor, Activity, Wifi, WifiOff, AlertTriangle, Zap, Server } from 'lucide-react'
+import { Menu, Settings, Moon, Sun, Monitor, Activity, Wifi, WifiOff, AlertTriangle, Zap, Server, Database } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -12,6 +12,7 @@ interface HeaderProps {
   onToggleStatus?: () => void
   onToggleLLMManager?: () => void
   onToggleConfig?: () => void
+  onToggleKBManager?: () => void
   className?: string
 }
 
@@ -21,6 +22,7 @@ export function Header({
   onToggleStatus, 
   onToggleLLMManager,
   onToggleConfig,
+  onToggleKBManager,
   className 
 }: HeaderProps) {
   const { theme, setTheme } = useTheme()
@@ -153,6 +155,18 @@ export function Header({
               title="Configuration Manager"
             >
               <Server className="h-5 w-5" />
+            </Button>
+          )}
+          
+          {onToggleKBManager && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onToggleKBManager}
+              className="hover:bg-accent"
+              title="Open Knowledge Base"
+            >
+              <Database className="h-5 w-5" />
             </Button>
           )}
           

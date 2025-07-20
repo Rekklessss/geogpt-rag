@@ -23,33 +23,172 @@ EMBEDDING_PORT="8810"
 RERANKING_PORT="8811" 
 GEOGPT_PORT="8812"
 
-# Function to validate required environment variables
-validate_environment() {
-    echo "🔍 Validating environment variables..."
+# Function to validate and ensure environment variables are properly set
+validate_and_setup_environment() {
+    echo "🔍 Validating and setting up environment variables..."
     
     local missing_vars=()
+    local setup_required=false
     
-    # Check required environment variables
+    # Check current OpenAI API key
     if [[ -z "$OPENAI_API_KEY" ]]; then
-        missing_vars+=("OPENAI_API_KEY")
+        echo "❌ OpenAI API key is not set"
+        setup_required=true
+    elif [[ "$OPENAI_API_KEY" == "your-openai-api-key-here" ]] || [[ "$OPENAI_API_KEY" == "YOUR_OPENAI_API_KEY_HERE" ]]; then
+        echo "⚠️  OPENAI_API_KEY is set to placeholder value"
+        setup_required=true
+    elif [[ ${#OPENAI_API_KEY} -lt 20 ]]; then
+        echo "⚠️  OpenAI API key seems too short (${#OPENAI_API_KEY} characters)"
+        echo "💡 OpenAI API keys typically start with 'sk-' and are 50+ characters"
+        read -p "Current key looks invalid. Update it? (Y/n): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            setup_required=true
+        fi
+    else
+        echo "✅ OpenAI API key looks valid (${#OPENAI_API_KEY} characters)"
+        echo "   Current key starts with: ${OPENAI_API_KEY:0:8}..."
+        read -p "Do you want to update it? (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            setup_required=true
+        fi
     fi
     
-    if [[ ${#missing_vars[@]} -gt 0 ]]; then
-        echo "❌ Missing required environment variables:"
-        for var in "${missing_vars[@]}"; do
-            echo "   - $var"
+    # Interactive API key setup if needed
+    if [[ "$setup_required" == "true" ]]; then
+        echo ""
+        echo "🔑 Please enter your OpenAI API key:"
+        echo "   - Get it from: https://platform.openai.com/api-keys"
+        echo "   - Should start with 'sk-'"
+        echo "   - Keep it secure and don't share it"
+        echo ""
+        
+        # Loop until valid key is provided
+        while true; do
+            read -s -p "OpenAI API Key: " NEW_OPENAI_API_KEY
+            echo ""
+            
+            if [[ -z "$NEW_OPENAI_API_KEY" ]]; then
+                echo "❌ No API key provided. Please try again."
+                continue
+            elif [[ "$NEW_OPENAI_API_KEY" == "your-openai-api-key-here" ]] || [[ "$NEW_OPENAI_API_KEY" == "YOUR_OPENAI_API_KEY_HERE" ]]; then
+                echo "❌ Please provide your actual API key, not the placeholder."
+                continue
+            elif [[ ${#NEW_OPENAI_API_KEY} -lt 20 ]]; then
+                echo "⚠️  API key seems short (${#NEW_OPENAI_API_KEY} characters)"
+                read -p "Continue with this key anyway? (y/N): " -n 1 -r
+                echo
+                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                    continue
+                fi
+            fi
+            
+            # Valid key provided
+            export OPENAI_API_KEY="$NEW_OPENAI_API_KEY"
+            echo "✅ OpenAI API key set successfully"
+            break
         done
+        
+        # Ask about making it persistent
         echo ""
-        echo "💡 Please set the missing variables:"
-        echo "   export OPENAI_API_KEY=\"your-openai-api-key-here\""
-        echo "   echo 'export OPENAI_API_KEY=\"your-key\"' >> ~/.bashrc"
-        echo ""
-        echo "   Then run this script again."
+        read -p "Make this API key persistent across sessions? (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo "🔒 Adding to ~/.bashrc..."
+            
+            # Backup existing bashrc
+            cp ~/.bashrc ~/.bashrc.backup.$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
+            
+            # Remove existing OpenAI API key lines
+            grep -v "export OPENAI_API_KEY" ~/.bashrc > ~/.bashrc.temp 2>/dev/null || touch ~/.bashrc.temp
+            grep -v "# GeoGPT OpenAI API Key" ~/.bashrc.temp > ~/.bashrc.temp2 2>/dev/null || cp ~/.bashrc.temp ~/.bashrc.temp2
+            
+            # Add new API key
+            echo "" >> ~/.bashrc.temp2
+            echo "# GeoGPT OpenAI API Key (added $(date))" >> ~/.bashrc.temp2
+            echo "export OPENAI_API_KEY=\"$OPENAI_API_KEY\"" >> ~/.bashrc.temp2
+            
+            # Replace bashrc
+            mv ~/.bashrc.temp2 ~/.bashrc
+            rm -f ~/.bashrc.temp 2>/dev/null || true
+            
+            echo "✅ API key added to ~/.bashrc"
+            echo "🔄 Will be available in new terminal sessions"
+        fi
+    fi
+    
+    # Final validation
+    if [[ -z "$OPENAI_API_KEY" ]] || [[ "$OPENAI_API_KEY" == "your-openai-api-key-here" ]]; then
+        echo "❌ OpenAI API key is still not properly set"
+        echo "💡 Please set it manually: export OPENAI_API_KEY=\"your-actual-key\""
         exit 1
     fi
     
-    echo "✅ All required environment variables are set"
+    # Set up all environment variables for consistency
+    export OPENAI_API_KEY="$OPENAI_API_KEY"
+    export EC2_INSTANCE_IP="$GEOGPT_PUBLIC_IP"
+    export EC2_INSTANCE_ID="$PRODUCTION_EC2_ID"
+    export LLM_PROVIDER="${LLM_PROVIDER:-auto}"
+    export LLM_MODEL="${LLM_MODEL:-gpt-4o-mini}"
+    export CONTEXT_WINDOW_SIZE="${CONTEXT_WINDOW_SIZE:-8192}"
+    export MAX_CONVERSATION_HISTORY="${MAX_CONVERSATION_HISTORY:-50}"
+    export ZILLIZ_CLOUD_URI="$ZILLIZ_CLOUD_URI"
+    export ZILLIZ_CLOUD_TOKEN="$ZILLIZ_CLOUD_TOKEN"
+    
+    echo ""
+    echo "✅ All environment variables configured:"
     echo "   OpenAI API Key: ✓ Set (${#OPENAI_API_KEY} characters)"
+    echo "   EC2 Instance IP: $EC2_INSTANCE_IP"
+    echo "   LLM Provider: $LLM_PROVIDER"
+    echo "   LLM Model: $LLM_MODEL"
+    echo "   Context Window: $CONTEXT_WINDOW_SIZE"
+}
+
+# Function to persist environment variables for the session
+persist_environment_for_session() {
+    echo "🔧 Persisting environment variables for current session..."
+    
+    # Write to a temporary env file that will be sourced
+    cat > /tmp/geogpt_env_vars.sh << EOF
+#!/bin/bash
+# GeoGPT Environment Variables - Generated $(date)
+export OPENAI_API_KEY="$OPENAI_API_KEY"
+export EC2_INSTANCE_IP="$EC2_INSTANCE_IP"
+export EC2_INSTANCE_ID="$EC2_INSTANCE_ID"
+export LLM_PROVIDER="$LLM_PROVIDER"
+export LLM_MODEL="$LLM_MODEL"
+export CONTEXT_WINDOW_SIZE="$CONTEXT_WINDOW_SIZE"
+export MAX_CONVERSATION_HISTORY="$MAX_CONVERSATION_HISTORY"
+export ZILLIZ_CLOUD_URI="$ZILLIZ_CLOUD_URI"
+export ZILLIZ_CLOUD_TOKEN="$ZILLIZ_CLOUD_TOKEN"
+EOF
+    
+    chmod +x /tmp/geogpt_env_vars.sh
+    source /tmp/geogpt_env_vars.sh
+    
+    echo "✅ Environment variables persisted for session"
+}
+
+# Function to verify environment variables are available
+verify_environment_available() {
+    local context="$1"
+    echo "🔍 Verifying environment variables are available ($context)..."
+    
+    if [[ -z "$OPENAI_API_KEY" ]] || [[ "$OPENAI_API_KEY" == "your-openai-api-key-here" ]]; then
+        echo "❌ OPENAI_API_KEY lost or invalid in context: $context"
+        echo "🔄 Re-sourcing environment variables..."
+        if [[ -f /tmp/geogpt_env_vars.sh ]]; then
+            source /tmp/geogpt_env_vars.sh
+            echo "✅ Environment variables restored"
+        else
+            echo "❌ Cannot restore environment variables"
+            echo "💡 Please re-export OPENAI_API_KEY and run script again"
+            exit 1
+        fi
+    fi
+    
+    echo "✅ Environment variables verified for $context"
 }
 
 # Function to get and validate IP address
@@ -81,11 +220,20 @@ else
     get_ip_address
 fi
 
-# Validate environment before proceeding
-validate_environment
+# Validate and setup environment before proceeding
+validate_and_setup_environment
+
+# Persist environment variables for the session
+persist_environment_for_session
 
 echo "🧹 GeoGPT-RAG Complete Cleanup & Redeploy"
 echo "========================================"
+echo "🔧 This script will:"
+echo "   1. Validate and setup environment variables (interactive)"
+echo "   2. Complete cleanup of existing deployment"
+echo "   3. Pull latest code and rebuild from scratch"
+echo "   4. Deploy and test all services"
+echo ""
 echo "⚠️  This will completely remove:"
 echo "   - All Docker containers and images"
 echo "   - All downloaded models (~7GB)"
@@ -116,6 +264,10 @@ cd "$PROJECT_DIR" || {
 
 # Set up environment variables for Docker Compose
 echo "🔧 Setting up environment variables for Docker Compose..."
+verify_environment_available "Docker Compose setup"
+
+# Re-export all variables to ensure they're available for Docker Compose
+export OPENAI_API_KEY="$OPENAI_API_KEY"
 export EC2_INSTANCE_IP="$GEOGPT_PUBLIC_IP"
 export EC2_INSTANCE_ID="$PRODUCTION_EC2_ID"
 export LLM_PROVIDER="${LLM_PROVIDER:-auto}"
@@ -235,11 +387,7 @@ chmod +x scripts/*.sh
 
 # Verify environment variables are still set
 echo "🔍 Verifying environment variables before Docker Compose..."
-if [[ -z "$OPENAI_API_KEY" ]]; then
-    echo "❌ OPENAI_API_KEY lost during cleanup! Please re-export it:"
-    echo "   export OPENAI_API_KEY=\"your-key-here\""
-    exit 1
-fi
+verify_environment_available "Docker Compose"
 
 # Rebuild Docker images (no cache)
 echo "🔨 Rebuilding Docker images from scratch..."
@@ -308,8 +456,10 @@ fi
 
 # Verify environment variables are properly set in container
 echo "🔍 Verifying environment variables in container..."
+verify_environment_available "Container verification"
+
 ENV_CHECK=$(sudo docker-compose exec -T geogpt-rag bash -c "
-if [[ -n \"\$OPENAI_API_KEY\" && \"\$OPENAI_API_KEY\" != \"YOUR_OPENAI_API_KEY_HERE\" ]]; then
+if [[ -n \"\$OPENAI_API_KEY\" && \"\$OPENAI_API_KEY\" != \"YOUR_OPENAI_API_KEY_HERE\" && \"\$OPENAI_API_KEY\" != \"your-openai-api-key-here\" ]]; then
     echo 'ENV_OK'
 else
     echo 'ENV_MISSING'
@@ -318,14 +468,26 @@ fi
 
 if [[ "$ENV_CHECK" != "ENV_OK" ]]; then
     echo "⚠️ Environment variables not properly set in container"
-    echo "🔧 Setting environment variables in container..."
-    sudo docker-compose exec -T geogpt-rag bash -c "
-        export OPENAI_API_KEY='$OPENAI_API_KEY'
-        export LLM_PROVIDER='$LLM_PROVIDER'
-        export LLM_MODEL='$LLM_MODEL'
-        export EC2_INSTANCE_IP='$EC2_INSTANCE_IP'
-        echo 'Environment variables set for current session'
-    "
+    echo "🔧 Restarting container to ensure environment variables are loaded..."
+    sudo docker-compose restart geogpt-rag
+    sleep 30
+    
+    # Verify again after restart
+    ENV_CHECK=$(sudo docker-compose exec -T geogpt-rag bash -c "
+    if [[ -n \"\$OPENAI_API_KEY\" && \"\$OPENAI_API_KEY\" != \"YOUR_OPENAI_API_KEY_HERE\" && \"\$OPENAI_API_KEY\" != \"your-openai-api-key-here\" ]]; then
+        echo 'ENV_OK'
+    else
+        echo 'ENV_MISSING'
+    fi
+    " 2>/dev/null || echo "ENV_ERROR")
+    
+    if [[ "$ENV_CHECK" != "ENV_OK" ]]; then
+        echo "❌ Environment variables still not properly set in container"
+        echo "🔍 Container environment check:"
+        sudo docker-compose exec -T geogpt-rag env | grep -E "(OPENAI|LLM|EC2)" || echo "No relevant environment variables found"
+    else
+        echo "✅ Environment variables successfully set after restart"
+    fi
 fi
 
 # Check service health
@@ -474,12 +636,20 @@ validate_deployment() {
 
 # Set environment variables for tests inside container
 echo "🔧 Setting up test environment in container..."
-sudo docker exec geogpt-rag-system bash -c "
-export EC2_INSTANCE_IP='$EC2_INSTANCE_IP'
-export OPENAI_API_KEY='$OPENAI_API_KEY'
-export LLM_PROVIDER='$LLM_PROVIDER'
-export LLM_MODEL='$LLM_MODEL'
-"
+verify_environment_available "Test setup"
+
+# Create environment variable array for consistent test execution
+TEST_ENV_VARS=(
+    "OPENAI_API_KEY=$OPENAI_API_KEY"
+    "EC2_INSTANCE_IP=localhost"
+    "LLM_PROVIDER=$LLM_PROVIDER"
+    "LLM_MODEL=$LLM_MODEL"
+    "POSTGRES_PASSWORD=geogpt_password"
+    "CONTEXT_WINDOW_SIZE=$CONTEXT_WINDOW_SIZE"
+    "MAX_CONVERSATION_HISTORY=$MAX_CONVERSATION_HISTORY"
+)
+
+echo "✅ Test environment variables prepared"
 
 # Run validation
 if validate_deployment; then
@@ -491,21 +661,29 @@ fi
 
 # Run system tests
 echo "🧪 Running updated system tests..."
-if sudo docker exec -e EC2_INSTANCE_IP="localhost" -e OPENAI_API_KEY="$OPENAI_API_KEY" -e LLM_PROVIDER="$LLM_PROVIDER" -e LLM_MODEL="$LLM_MODEL" -e POSTGRES_PASSWORD="geogpt_password" geogpt-rag-system python /app/scripts/test_system.py; then
+verify_environment_available "System tests"
+
+if sudo docker exec $(printf ' -e %s' "${TEST_ENV_VARS[@]}") geogpt-rag-system python /app/scripts/test_system.py; then
     echo "✅ System tests passed!"
     TEST_STATUS=0
 else
     echo "❌ System tests failed!"
+    echo "🔍 Checking test environment in container:"
+    sudo docker exec geogpt-rag-system bash -c "echo 'OPENAI_API_KEY length:' \${#OPENAI_API_KEY}"
     TEST_STATUS=1
 fi
 
 # Run comprehensive GeoGPT API tests
 echo "🚀 Running comprehensive GeoGPT API tests with environment variables..."
-if sudo docker exec -e EC2_INSTANCE_IP="localhost" -e OPENAI_API_KEY="$OPENAI_API_KEY" -e LLM_PROVIDER="$LLM_PROVIDER" -e LLM_MODEL="$LLM_MODEL" -e POSTGRES_PASSWORD="geogpt_password" geogpt-rag-system python /app/scripts/test_geogpt_api.py; then
+verify_environment_available "GeoGPT API tests"
+
+if sudo docker exec $(printf ' -e %s' "${TEST_ENV_VARS[@]}") geogpt-rag-system python /app/scripts/test_geogpt_api.py; then
     echo "✅ GeoGPT API tests passed!"
     GEOGPT_TEST_STATUS=0
 else
     echo "❌ GeoGPT API tests failed!"
+    echo "🔍 Checking API test environment in container:"
+    sudo docker exec geogpt-rag-system bash -c "echo 'Environment check:'; env | grep -E '(OPENAI|LLM|EC2)' | head -5"
     GEOGPT_TEST_STATUS=1
 fi
 
@@ -612,4 +790,21 @@ echo "   ./scripts/cleanup_redeploy.sh --ip YOUR_NEW_IP"
 echo "   OR: export GEOGPT_PUBLIC_IP='YOUR_NEW_IP' && ./scripts/cleanup_redeploy.sh"
 echo ""
 echo "🐳 Docker containers:"
-sudo docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 
+sudo docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+echo ""
+echo "🧹 Cleaning up temporary files..."
+rm -f /tmp/geogpt_env_vars.sh 2>/dev/null || true
+
+echo ""
+echo "💡 Environment Variable Management:"
+echo "   - API key setup: Integrated in this script (interactive)"
+echo "   - Make persistent: Option provided during setup"
+echo "   - Manual setup: export OPENAI_API_KEY=\"your-key\""
+echo ""
+echo "🔍 To verify environment variables:"
+echo "   echo \$OPENAI_API_KEY"
+echo "   echo \$GEOGPT_PUBLIC_IP"
+echo ""
+echo "🔄 To redeploy with different settings:"
+echo "   unset OPENAI_API_KEY && ./scripts/cleanup_redeploy.sh" 

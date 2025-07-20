@@ -39,6 +39,21 @@ export function GeoGPTInterface({ className }: GeoGPTInterfaceProps) {
     }
   }
 
+  const handleToggleKBManager = () => {
+    // Simply toggle the sidebar open when KB button is clicked
+    setSidebarOpen(true)
+    // Close other panels
+    setStatusMonitorOpen(false)
+    setLlmManagerOpen(false)
+    setConfigManagerOpen(false)
+    
+    // Add visual feedback
+    toast({
+      title: "Knowledge Base Opened",
+      description: "Manage your knowledge base files in the sidebar",
+    })
+  }
+
   const handleToggleStatus = () => {
     setStatusMonitorOpen(!statusMonitorOpen)
     if (!statusMonitorOpen) {
@@ -56,6 +71,7 @@ export function GeoGPTInterface({ className }: GeoGPTInterfaceProps) {
         onToggleStatus={handleToggleStatus}
         onToggleLLMManager={handleToggleLLMManager}
         onToggleConfig={handleToggleConfig}
+        onToggleKBManager={handleToggleKBManager}
       />
       
       {/* Main Content */}
@@ -147,6 +163,8 @@ export function GeoGPTInterface({ className }: GeoGPTInterfaceProps) {
           </div>
         </div>
       )}
+
+
     </div>
   )
 } 

@@ -142,14 +142,14 @@ export function LLMProviderManager() {
               <div
                 key={providerName}
                 className={`p-4 border rounded-lg transition-all ${
-                  isActive ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                  isActive ? 'border-primary bg-primary/5 dark:bg-primary/10' : 'border-border bg-card'
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">{info.icon}</span>
                     <div>
-                      <h3 className="font-semibold flex items-center gap-2">
+                      <h3 className="font-semibold flex items-center gap-2 text-foreground">
                         {info.displayName}
                         {isActive && <Badge variant="default">Current</Badge>}
                         {isHealthy ? (
@@ -158,19 +158,19 @@ export function LLMProviderManager() {
                           <AlertCircle className="h-4 w-4 text-red-500" />
                         )}
                       </h3>
-                      <p className="text-sm text-gray-600">{info.description}</p>
+                      <p className="text-sm text-muted-foreground">{info.description}</p>
                       {providerHealth?.model && (
-                        <p className="text-xs text-gray-500">Model: {providerHealth.model}</p>
+                        <p className="text-xs text-muted-foreground">Model: {providerHealth.model}</p>
                       )}
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right text-sm">
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 text-muted-foreground">
                         <DollarSign className="h-3 w-3" />
                         <span>{info.cost}</span>
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 text-muted-foreground">
                         <Clock className="h-3 w-3" />
                         {providerHealth?.response_time ? 
                           `${(providerHealth.response_time * 1000).toFixed(0)}ms` : 
@@ -194,7 +194,7 @@ export function LLMProviderManager() {
                   </div>
                 </div>
                 {providerHealth?.error && (
-                  <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                  <div className="mt-2 p-2 bg-destructive/10 border border-destructive/20 rounded text-sm text-destructive">
                     <strong>Error:</strong> {providerHealth.error}
                   </div>
                 )}
