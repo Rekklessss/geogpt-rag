@@ -348,7 +348,7 @@ async def chat_with_geogpt(request: ChatRequest):
         return ChatResponse(
             response=final_response,
             thinking=thinking,
-            sources=sources if sources else None,
+            sources=sources if sources else [],
             processing_time=processing_time,
             tokens=tokens,
             metadata={
@@ -956,6 +956,9 @@ async def run_discovery_process(discovery_id: str):
                 logger.error(f"Discovery step {step_idx + 1} error: {e}")
                 step["status"] = "error"
                 step["error"] = str(e)
+                discovery["status"] = "error"
+                discovery["error"] = str(e)
+                break
             
             discovery["progress"] = ((step_idx + 1) / discovery["max_steps"]) * 100
             
@@ -967,6 +970,7 @@ async def run_discovery_process(discovery_id: str):
     except Exception as e:
         logger.error(f"Discovery process error: {e}")
         discovery["status"] = "error"
+        discovery["error"] = str(e)
 
 async def process_query_analysis(discovery):
     """Process query analysis step with real LLM analysis"""
@@ -988,6 +992,8 @@ Provide a structured analysis that will guide the subsequent discovery steps."""
     
     try:
         analysis_result = llm_generate(analysis_prompt)
+        if not analysis_result or analysis_result.strip() == "":
+            raise Exception("LLM failed to generate analysis result")
         discovery["steps"][0]["result"] = analysis_result
         
         # Extract key concepts for better search
@@ -998,6 +1004,8 @@ Extract 3-5 key search terms that would be most effective for finding relevant i
 Return only the search terms, separated by commas."""
         
         key_terms = llm_generate(concepts_prompt)
+        if not key_terms or key_terms.strip() == "":
+            raise Exception("LLM failed to generate key terms")
         discovery["search_terms"] = [term.strip() for term in key_terms.split(",")]
         
         discovery["sources"].append({
